@@ -1,0 +1,13 @@
+[package]
+name = "soliton-mechanics"
+description = "Planar rigid-body mechanics with exact constraints and Coulomb friction: the Soliton Physics mechanics pillar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["physics", "simulation", "mechanics", "rigid-body", "education"]
+categories = ["science", "simulation"]
+
+[dependencies]
+soliton-core = { workspace = true }
