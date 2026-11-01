@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "soliton"
+description = "Research-grade spectral solvers for nonlinear wave equations"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+requires-python = ">=3.10"
+dynamic = ["version"]
+dependencies = ["numpy>=1.24"]
+classifiers = [
+  "Programming Language :: Rust",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+
+[project.urls]
+Homepage = "https://github.com/soliton-physics/soliton"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "soliton._native"
+python-source = "python"
