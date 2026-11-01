@@ -66,10 +66,14 @@ pub struct ForceSample {
 }
 
 /// Accumulated force and torque per body for one evaluation, with the breakdown that produced them.
+/// Explicit forces drive the integrator; constraint reactions are recorded separately because they are applied
+/// as impulses and must not be kicked a second time.
 #[derive(Clone, Debug, Default)]
 pub struct Loads {
     pub(crate) forces: Vec<Vec2>,
     pub(crate) torques: Vec<f64>,
+    pub(crate) reactions: Vec<Vec2>,
+    pub(crate) reaction_torques: Vec<f64>,
     pub(crate) samples: Vec<ForceSample>,
 }
 
@@ -77,12 +81,39 @@ impl Loads {
     pub(crate) fn resize(&mut self, bodies: usize) {
         self.forces.resize(bodies, Vec2::ZERO);
         self.torques.resize(bodies, 0.0);
+        self.reactions.resize(bodies, Vec2::ZERO);
+        self.reaction_torques.resize(bodies, 0.0);
     }
 
     pub(crate) fn clear(&mut self) {
         self.forces.iter_mut().for_each(|f| *f = Vec2::ZERO);
         self.torques.iter_mut().for_each(|t| *t = 0.0);
+        self.reactions.iter_mut().for_each(|f| *f = Vec2::ZERO);
+        self.reaction_torques.iter_mut().for_each(|t| *t = 0.0);
         self.samples.clear();
+    }
+
+    /// Records a constraint or contact reaction already applied as an impulse.
+    pub(crate) fn react(
+        &mut self,
+        bodies: &Bodies,
+        body: BodyId,
+        label: ForceLabel,
+        force: Vec2,
+        angular: f64,
+        point: Vec2,
+    ) {
+        let i = body.index();
+        self.reactions[i] += force;
+        self.reaction_torques[i] += angular;
+        let torque = angular - (point - bodies.position(body)).cross(force);
+        self.samples.push(ForceSample {
+            body,
+            label,
+            force,
+            point,
+            torque,
+        });
     }
 
     /// Applies `force` at a world `point` on `body`.

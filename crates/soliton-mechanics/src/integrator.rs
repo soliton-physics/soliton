@@ -20,6 +20,7 @@ impl Integrator for Verlet {
     fn step(&mut self, world: &mut World, time: f64, dt: f64) {
         let n = world.bodies.len();
         let half = 0.5 * dt;
+        world.prepare_constraints();
 
         for i in 0..n {
             let b = &mut world.bodies;
@@ -30,6 +31,7 @@ impl Integrator for Verlet {
             b.positions[i] += b.velocities[i] * dt;
             b.angles[i] += b.angular_velocities[i] * dt;
         }
+        world.project_positions(dt);
 
         let half_velocities: Vec<Vec2> = world.bodies.velocities.clone();
         let half_spins: Vec<f64> = world.bodies.angular_velocities.clone();
@@ -56,5 +58,6 @@ impl Integrator for Verlet {
                 break;
             }
         }
+        world.solve_velocities(dt, time + dt);
     }
 }
