@@ -100,4 +100,4 @@ The package lands in `crates/soliton-wasm/pkg` and is what the playground import
 
 ## License
 
-Dual-licensed under MIT or Apache-2.0, at your option.
+Dual-licensed under MIT or Apache-2.0.
