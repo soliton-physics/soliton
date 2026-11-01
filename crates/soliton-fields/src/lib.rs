@@ -1,4 +1,4 @@
-//! Soliton Physics engine core.
+//! Soliton Physics fields pillar.
 //!
 //! Periodic pseudo-spectral solvers for semi-linear evolution equations of the
 //! form `u_t = L u + N(u)`, where `L` is a linear operator diagonal in Fourier
@@ -14,6 +14,7 @@ pub mod spectral;
 pub mod stepper;
 
 pub use num_complex::Complex64;
+pub use soliton_core::Simulate;
 
 pub use equation::{Invariant, SemiLinear};
 pub use equations::{Kdv, Nls};

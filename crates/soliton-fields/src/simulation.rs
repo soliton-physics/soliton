@@ -3,6 +3,7 @@ use crate::grid::PeriodicGrid;
 use crate::spectral::SpectralSpace;
 use crate::stepper::{Etdrk4, Stepper};
 use num_complex::Complex64;
+use soliton_core::Simulate;
 
 /// Drives a [`SemiLinear`] equation forward in time on a [`PeriodicGrid`].
 pub struct Simulation<E: SemiLinear, S: Stepper = Etdrk4> {
@@ -39,14 +40,6 @@ impl<E: SemiLinear, S: Stepper> Simulation<E, S> {
 
     pub fn equation(&self) -> &E {
         &self.equation
-    }
-
-    pub fn time(&self) -> f64 {
-        self.time
-    }
-
-    pub fn dt(&self) -> f64 {
-        self.stepper.dt()
     }
 
     pub fn spectrum(&self) -> &[Complex64] {
@@ -89,20 +82,24 @@ impl<E: SemiLinear, S: Stepper> Simulation<E, S> {
     pub fn reset_time(&mut self) {
         self.time = 0.0;
     }
+}
 
-    pub fn step(&mut self) {
+impl<E: SemiLinear, S: Stepper> Simulate for Simulation<E, S> {
+    fn time(&self) -> f64 {
+        self.time
+    }
+
+    fn dt(&self) -> f64 {
+        self.stepper.dt()
+    }
+
+    fn step(&mut self) {
         self.stepper
             .step(&self.equation, &mut self.space, &mut self.spectrum);
         self.time += self.stepper.dt();
     }
 
-    pub fn advance(&mut self, steps: usize) {
-        for _ in 0..steps {
-            self.step();
-        }
-    }
-
-    pub fn invariants(&mut self) -> Vec<Invariant> {
+    fn invariants(&mut self) -> Vec<Invariant> {
         self.equation.invariants(&mut self.space, &self.spectrum)
     }
 }

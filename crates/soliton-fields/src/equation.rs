@@ -1,12 +1,6 @@
 use crate::spectral::SpectralSpace;
 use num_complex::Complex64;
-
-/// A conserved quantity evaluated on the current state.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Invariant {
-    pub name: &'static str,
-    pub value: f64,
-}
+pub use soliton_core::Invariant;
 
 /// An evolution equation `u_t = L u + N(u)` with `L` diagonal in Fourier space.
 pub trait SemiLinear {
