@@ -3,6 +3,8 @@ use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+mod mechanics;
+
 use soliton_fields::{exact, Kdv, Nls, PeriodicGrid, Simulate};
 
 enum Engine {
@@ -148,5 +150,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Simulation>()?;
     m.add_function(wrap_pyfunction!(kdv_soliton, m)?)?;
     m.add_function(wrap_pyfunction!(nls_bright_soliton, m)?)?;
+    m.add_class::<mechanics::Scene>()?;
+    m.add_class::<mechanics::Run>()?;
+    m.add_function(wrap_pyfunction!(mechanics::catalogue_json, m)?)?;
     Ok(())
 }

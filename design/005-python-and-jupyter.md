@@ -1,6 +1,6 @@
 # 005: Python package and notebook workflow
 
-Status: Draft
+Status: Implemented (first slice)
 
 ## Goals
 
@@ -49,6 +49,15 @@ run = scene.run(until=2.0)
 
 `run.to_dataframe()` is available when pandas is installed. Plotting stays in the notebook; the package does not
 depend on Matplotlib.
+
+## What is implemented
+
+`soliton.mechanics` wraps the engine's `Scene`: `scenario(id, **params)`, `Scene.from_json`, `load`, `save`,
+`to_json`, `answers()`, and `run(until, record_every)` returning a `Run` with `t`, `body(label)` (NumPy arrays of
+position, velocity, acceleration, angle, angular velocity), `force(label, kind)`, `energy()` and `events`.
+`catalogue()` returns the specs with parameter schemas. The fluent `World` builder in Python is not exposed yet:
+scenes are built from the catalogue or from JSON, which covers the teacher and student workflow. Tests in
+`crates/soliton-py/tests/test_mechanics.py`.
 
 ## Live widgets
 

@@ -14,6 +14,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 soliton-fields = { workspace = true }
+soliton-mechanics = { workspace = true }
 num-complex = { workspace = true }
 pyo3 = { version = "0.30", features = ["extension-module", "abi3-py310"] }
 numpy = "0.30"
+serde_json = { workspace = true }
