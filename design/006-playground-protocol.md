@@ -1,6 +1,6 @@
 # 006: What the WebAssembly layer exposes to the playground
 
-Status: Draft
+Status: Implemented
 
 ## Principle
 
@@ -24,6 +24,12 @@ world.series("block.v.x");                            // Float64Array of a recor
 
 `snapshot()` returns a handful of `Float64Array`s over a shared layout, not per-body objects, so a frame costs no
 allocation beyond the arrays themselves.
+
+As implemented, `MechanicsWorld` exposes: `mechanics_catalogue()`; `new(id, params, record_every)`; `step(n)`,
+`time()`, `dt()`; static `bodies()` (label, kind, mass, shape) and `view()`; per frame `state()` as
+`[x, y, θ, vx, vy, ω, ax, ay]` per body, `forces(body)` as the free-body diagram, `sketches()`; `exact()`,
+`energy()`, `events()` (drained since the previous call); and the recorded `series_time()`, `series(body, quantity)`,
+`series_force(body, label)` and `series_energy(quantity)` for the graphs.
 
 ## What the playground draws
 
