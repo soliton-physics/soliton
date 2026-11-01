@@ -90,3 +90,36 @@ pub fn seesaw_angular_acceleration(
 ) -> f64 {
     (m1 * d1 - m2 * d2) * g / (rod_inertia + m1 * d1 * d1 + m2 * d2 * d2)
 }
+
+/// Acceleration of a block sliding down an incline of angle `theta` with kinetic friction `mu`.
+pub fn incline_sliding_acceleration(theta: f64, mu: f64, g: f64) -> f64 {
+    g * (theta.sin() - mu * theta.cos())
+}
+
+/// Acceleration of a round body rolling without slipping down an incline; `inertia_ratio` is `I / (m R²)`.
+pub fn rolling_acceleration(theta: f64, inertia_ratio: f64, g: f64) -> f64 {
+    g * theta.sin() / (1.0 + inertia_ratio)
+}
+
+/// Least static friction coefficient for a round body to roll without slipping; `inertia_ratio` is `I / (m R²)`.
+pub fn rolling_min_friction(theta: f64, inertia_ratio: f64) -> f64 {
+    theta.tan() * inertia_ratio / (1.0 + inertia_ratio)
+}
+
+/// Final velocities of a head-on collision with restitution `e`.
+pub fn collision_1d(m1: f64, u1: f64, m2: f64, u2: f64, e: f64) -> (f64, f64) {
+    let total = m1 + m2;
+    let v1 = (m1 * u1 + m2 * u2 - m2 * e * (u1 - u2)) / total;
+    let v2 = (m1 * u1 + m2 * u2 + m1 * e * (u1 - u2)) / total;
+    (v1, v2)
+}
+
+/// Distance a block sliding at `u` travels on a floor with kinetic friction `mu` before stopping.
+pub fn stopping_distance(u: f64, mu: f64, g: f64) -> f64 {
+    u * u / (2.0 * mu * g)
+}
+
+/// Least floor friction for a ladder leaning on a smooth wall at angle `theta` from the floor to stay put.
+pub fn ladder_min_friction(theta: f64) -> f64 {
+    0.5 / theta.tan()
+}

@@ -32,6 +32,7 @@ impl Integrator for Verlet {
             b.angles[i] += b.angular_velocities[i] * dt;
         }
         world.project_positions(dt);
+        world.detect_contacts();
 
         let half_velocities: Vec<Vec2> = world.bodies.velocities.clone();
         let half_spins: Vec<f64> = world.bodies.angular_velocities.clone();
@@ -59,5 +60,6 @@ impl Integrator for Verlet {
             }
         }
         world.solve_velocities(dt, time + dt);
+        world.correct_positions();
     }
 }

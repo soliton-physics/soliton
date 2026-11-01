@@ -63,6 +63,8 @@ pub struct ForceSample {
     pub force: Vec2,
     pub point: Vec2,
     pub torque: f64,
+    /// An impact impulse spread over one step; its energy is accounted at the impact, not through power.
+    pub impulsive: bool,
 }
 
 /// Accumulated force and torque per body for one evaluation, with the breakdown that produced them.
@@ -94,6 +96,7 @@ impl Loads {
     }
 
     /// Records a constraint or contact reaction already applied as an impulse.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn react(
         &mut self,
         bodies: &Bodies,
@@ -102,6 +105,7 @@ impl Loads {
         force: Vec2,
         angular: f64,
         point: Vec2,
+        impulsive: bool,
     ) {
         let i = body.index();
         self.reactions[i] += force;
@@ -113,6 +117,7 @@ impl Loads {
             force,
             point,
             torque,
+            impulsive,
         });
     }
 
@@ -134,6 +139,7 @@ impl Loads {
             force,
             point,
             torque: 0.0,
+            impulsive: false,
         });
     }
 
@@ -145,6 +151,7 @@ impl Loads {
             force: Vec2::ZERO,
             point: bodies.position(body),
             torque,
+            impulsive: false,
         });
     }
 

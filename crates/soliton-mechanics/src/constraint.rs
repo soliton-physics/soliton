@@ -2,16 +2,41 @@ use crate::body::{Bodies, BodyId};
 use crate::force::{Anchor, ForceLabel};
 use soliton_core::Vec2;
 
-/// One scalar equation `C(x) = 0` (bilateral) or `C(x) >= 0` (unilateral) with its Jacobian.
+/// How a row's impulse is bounded and what it means.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RowKind {
+    /// `C = 0`; the impulse may have either sign.
+    Bilateral,
+    /// `C >= 0` with a non-negative impulse: ropes.
+    Rope,
+    /// Non-penetration of a contact; non-negative impulse, with a restitution target in `bias`.
+    Normal,
+    /// Coulomb friction of a contact, bounded by the normal impulse of row `normal`.
+    Friction {
+        normal: usize,
+        static_friction: f64,
+        kinetic_friction: f64,
+    },
+}
+
+/// One scalar equation with its Jacobian. `source` is the constraint or contact index it came from.
 #[derive(Clone, Copy, Debug)]
 pub struct Row {
-    pub constraint: usize,
+    pub source: usize,
     pub label: ForceLabel,
+    pub kind: RowKind,
     pub error: f64,
-    pub unilateral: bool,
+    /// Target relative velocity after the solve; zero except for restitution.
+    pub bias: f64,
     pub active: bool,
     pub(crate) start: usize,
     pub(crate) len: usize,
+}
+
+impl Row {
+    pub fn unilateral(&self) -> bool {
+        !matches!(self.kind, RowKind::Bilateral)
+    }
 }
 
 /// One body's share of a row: `J v = linear · v + angular · ω`.
@@ -36,32 +61,49 @@ impl Rows {
         self.entries.clear();
     }
 
-    pub fn bilateral(&mut self, constraint: usize, label: ForceLabel, error: f64) {
-        self.push(constraint, label, error, false, true);
+    pub fn bilateral(&mut self, source: usize, label: ForceLabel, error: f64) {
+        self.push(source, label, RowKind::Bilateral, error, 0.0, true);
     }
 
-    pub fn unilateral(&mut self, constraint: usize, label: ForceLabel, error: f64, active: bool) {
-        self.push(constraint, label, error, true, active);
+    pub fn rope(&mut self, source: usize, label: ForceLabel, error: f64, active: bool) {
+        self.push(source, label, RowKind::Rope, error, 0.0, active);
     }
 
-    fn push(
+    pub(crate) fn push(
         &mut self,
-        constraint: usize,
+        source: usize,
         label: ForceLabel,
+        kind: RowKind,
         error: f64,
-        unilateral: bool,
+        bias: f64,
         active: bool,
     ) {
         let start = self.entries.len();
         self.rows.push(Row {
-            constraint,
+            source,
             label,
+            kind,
             error,
-            unilateral,
+            bias,
             active,
             start,
             len: 0,
         });
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    /// A copy of the rows from `from` onward, with their entries rebased.
+    pub(crate) fn tail(&self, from: usize) -> Rows {
+        let mut out = Rows::default();
+        for row in &self.rows[from..] {
+            let start = out.entries.len();
+            out.entries.extend_from_slice(self.entries_of(row));
+            out.rows.push(Row { start, ..*row });
+        }
+        out
     }
 
     /// Adds a body to the last row through a force-like direction at a world point.
