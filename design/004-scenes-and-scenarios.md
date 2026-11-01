@@ -122,7 +122,7 @@ Ordered by the NCERT chapters. Each row is a scene builder with parameters, an e
 | damped oscillator | `m, k, b` | envelope `e^{−bt/2m}`, damped frequency |
 | driven oscillator and resonance (Phase 2) | `m, k, b, F₀, ω_d` | amplitude vs `ω_d` |
 
-## Catalogue, class 12 (Phase 2)
+## Catalogue, class 12 (on hold until requested)
 
 | Scenario | Parameters | Exact |
 | --- | --- | --- |

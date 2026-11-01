@@ -29,6 +29,9 @@ crates/
 
 Dependency direction is strictly downward. Pillars never depend on each other or on the bindings.
 
+Decided 2026-11-01: the split is accepted. `soliton-core` holds only what both pillars need: `Vec2`, `Invariant`,
+and the `Simulate` trait. Recorders and events are pillar-specific and live with their pillar.
+
 ## Shared abstractions
 
 - `Scalar` is `f64` everywhere. See conventions for why.

@@ -1,6 +1,6 @@
 [package]
-name = "soliton-core"
-description = "Spectral solvers for nonlinear wave equations: the Soliton Physics engine core"
+name = "soliton-fields"
+description = "Spectral solvers for nonlinear wave equations: the Soliton Physics fields pillar"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,3 +12,4 @@ categories = ["science", "simulation"]
 [dependencies]
 num-complex = { workspace = true }
 rustfft = { workspace = true }
+soliton-core = { workspace = true }

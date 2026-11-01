@@ -41,8 +41,9 @@ the free-body diagram.
 | `LinearDrag` | one body | `-b v` |
 | `QuadraticDrag` | one body | `-c |v| v` |
 | `Driving` | one body | `F₀ cos(ω_d t)` |
+| `Torque` | one body | constant couple; flywheels and pivoted rods |
 | `Gravitation` | pairs of bodies | Newton's law; Phase 2 |
-| `UniformElectric`, `UniformMagnetic`, `Coulomb` | charged bodies | Lorentz and Coulomb; Phase 2 |
+| `UniformElectric`, `UniformMagnetic`, `Coulomb` | charged bodies | Lorentz and Coulomb; on hold until requested |
 
 Forces are stateless. Anything that needs memory (a rope that is slack, a contact that persists) is a constraint.
 
@@ -62,13 +63,22 @@ Why Verlet: it is symplectic and time-reversible, so energy in a pendulum, a spr
 true value instead of drifting. It is exact for constant acceleration, so a projectile trajectory is reproduced to
 round-off at any `dt`. It is second order for everything else.
 
-Velocity-dependent forces (drag, magnetic) make Verlet formally implicit. We evaluate them at `v_half`, which keeps
-second order in practice for the damping strengths in the syllabus. The convergence test for damped oscillation
-guards this.
+Velocity-dependent forces (drag, magnetic) make the final kick implicit: `v_new` appears on both sides. Evaluating
+them at `v_half` instead would drop the scheme to first order. The engine solves the final kick by fixed-point
+iteration, `v ← v_half + (dt/2) a(x_new, v, t + dt)`, which converges in a few iterations for the damping strengths in
+the syllabus and keeps second order. Worlds without velocity-dependent forces skip the iteration. The convergence test
+for the damped oscillator guards this.
 
-Alternatives available by name: `Rk4` for smooth, dissipative, unconstrained systems where symplecticity does not
-matter and fourth order helps (resonance curves); `Yoshida4` for conservative orbital problems when a long integration
-needs fourth order and symplecticity together. Neither supports constraints or contact in Phase 1.
+Forces are evaluated at step boundaries, and one evaluation serves both the closing half-kick of a step and the
+opening half-kick of the next. A force that switches on or off exactly at a boundary would then be applied for half a
+step too long or too short. Forces therefore receive which half-step they are being evaluated for, and a time window
+`[from, until)` tests membership of that half-step rather than of the instant. A push of 3 N for 2 s gives exactly
+the textbook speed. Worlds with windowed forces re-evaluate loads at the start of each step; others reuse the previous
+end-of-step loads. Time is `steps × dt`, never accumulated, so a window edge at `t = 2` is hit exactly.
+
+Phase 1 ships Verlet only. Alternatives planned by name: `Rk4` for smooth, dissipative, unconstrained systems where
+symplecticity does not matter and fourth order helps (resonance curves); `Yoshida4` for conservative orbital problems
+when a long integration needs fourth order and symplecticity together. Neither will support constraints or contact.
 
 ## What the engine reports
 
@@ -82,8 +92,10 @@ Per body, at every sample:
 Per world:
 
 - total linear momentum, total angular momentum about the origin
-- total mechanical energy and a dissipation ledger: cumulative work done by friction and drag, energy lost in inelastic
-  impacts. `KE + PE + dissipated` is the quantity that must stay constant, and its drift is the accuracy measure.
+- an energy ledger: kinetic, potential, cumulative energy dissipated by drag and friction and lost in inelastic
+  impacts, and cumulative work done by applied forces, torques and driving forces. The conserved quantity is
+  `kinetic + potential + dissipated − external_work`, and its drift is the accuracy measure. Work is accumulated by the
+  trapezoidal rule over each step so the ledger is second order like the integrator.
 - events (see 002 and 003)
 
 ## Recorder
@@ -95,19 +107,24 @@ offset, so a notebook can ask for "the normal force on body 2 over time" and get
 ## Public API (Rust)
 
 ```rust
-let mut world = World::new(Gravity::new(0.0, -9.8));
-let ground = world.add_static(HalfPlane::new(Vec2::Y, 0.0)).friction(0.4, 0.3);
-let block  = world.add_particle(1.0).at(0.0, 0.0).velocity(3.0, 4.0);
+let mut world = World::new(Vec2::new(0.0, -9.8));
+let ground = world.add(Body::fixed(HalfPlane::new(Vec2::Y, 0.0)).friction(0.4, 0.3));
+let block  = world.add(Body::particle(1.0).at(0.0, 0.0).velocity(3.0, 4.0));
 world.add_force(Applied::new(block, Vec2::new(2.0, 0.0)).until(1.5));
 
 let mut recorder = Recorder::every(10);
-let mut sim = Simulation::new(world, Verlet, 1e-3);
+let mut sim = Simulation::new(world, 1e-3);
 sim.run_until(3.0, &mut recorder);
 
-recorder.body(block).x();              // &[f64]
-recorder.body(block).force("normal");  // &[Vec2]
-sim.events();                           // &[Event]
+recorder.body(block).position;                   // Vec<Vec2>
+recorder.force(block, ForceLabel::Normal);        // Vec<Vec2>, one per sample
+sim.energy().conserved();                         // kinetic + potential + dissipated − external work
+sim.events();                                     // &[Event]
 ```
+
+Bodies are values built with a fluent API and handed to `World::add`, which returns the `BodyId`. Materials
+(friction coefficients, restitution) live on the body; the defaults are frictionless and perfectly elastic, which is
+what a textbook means by "smooth" and "elastic" when it says nothing.
 
 ## Validation (Phase 1)
 
