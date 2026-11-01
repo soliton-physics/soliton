@@ -2,10 +2,11 @@
 //!
 //! Planar rigid bodies under explicit forces and exact constraints, integrated with velocity Verlet and impulses.
 //! The engine reports every force it applies, so a free-body diagram is an output rather than a drawing.
-//! Designs: `design/001-mechanics-core.md`, `design/002-constraints-and-ropes.md`.
+//! Designs: `design/001-mechanics-core.md`, `design/002-constraints-and-ropes.md`, `design/003-contact-and-friction.md`.
 
 mod body;
 mod constraint;
+mod contact;
 mod energy;
 mod event;
 pub mod exact;
@@ -19,7 +20,8 @@ mod solver;
 mod world;
 
 pub use body::{Bodies, Body, BodyId, BodyKind, Material};
-pub use constraint::{Constraint, Entry, FixedAngle, PinJoint, Rod, Row, Rows, Slot};
+pub use constraint::{Constraint, Entry, FixedAngle, PinJoint, Rod, Row, RowKind, Rows, Slot};
+pub use contact::Contact;
 pub use energy::EnergyLedger;
 pub use event::{Event, EventKind};
 pub use force::{

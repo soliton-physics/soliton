@@ -1,17 +1,20 @@
 use crate::body::{Bodies, Body, BodyId};
 use crate::constraint::Constraint;
+use crate::contact::{detect, Contact};
 use crate::event::Event;
 use crate::force::{Force, ForceSample, Gravity, Instant, Loads, WorkClass};
 use crate::solver::ConstraintSolver;
 use soliton_core::Vec2;
 
-/// Bodies, the forces acting on them, and the loads those forces produced at the current state.
+/// Bodies, the forces and constraints acting on them, and the loads produced at the current state.
 pub struct World {
     pub(crate) bodies: Bodies,
     forces: Vec<Box<dyn Force>>,
     constraints: Vec<Box<dyn Constraint>>,
     solver: ConstraintSolver,
+    contacts: Vec<Contact>,
     pub(crate) events: Vec<Event>,
+    pub(crate) impact_loss: f64,
     pub(crate) loads: Loads,
     gravity: Vec2,
     has_velocity_forces: bool,
@@ -25,7 +28,9 @@ impl World {
             forces: Vec::new(),
             constraints: Vec::new(),
             solver: ConstraintSolver::default(),
+            contacts: Vec::new(),
             events: Vec::new(),
+            impact_loss: 0.0,
             loads: Loads::default(),
             gravity,
             has_velocity_forces: false,
@@ -57,38 +62,17 @@ impl World {
         self.gravity
     }
 
+    pub fn bodies(&self) -> &Bodies {
+        &self.bodies
+    }
+
     pub fn constraint(&self, index: usize) -> &dyn Constraint {
         self.constraints[index].as_ref()
     }
 
-    pub(crate) fn prepare_constraints(&mut self) {
-        if !self.constraints.is_empty() {
-            self.solver.prepare(&self.constraints, &self.bodies);
-        }
-    }
-
-    pub(crate) fn project_positions(&mut self, dt: f64) {
-        if !self.constraints.is_empty() {
-            self.solver
-                .project_positions(&self.constraints, &mut self.bodies, dt);
-        }
-    }
-
-    pub(crate) fn solve_velocities(&mut self, dt: f64, time: f64) {
-        if !self.constraints.is_empty() {
-            self.solver.solve_velocities(
-                &self.constraints,
-                &mut self.bodies,
-                &mut self.loads,
-                dt,
-                time,
-                &mut self.events,
-            );
-        }
-    }
-
-    pub fn bodies(&self) -> &Bodies {
-        &self.bodies
+    /// Contacts found by the last detection pass.
+    pub fn contacts(&self) -> &[Contact] {
+        &self.contacts
     }
 
     pub(crate) fn has_velocity_forces(&self) -> bool {
@@ -99,11 +83,68 @@ impl World {
         self.has_windowed_forces
     }
 
-    /// Recomputes every force at the current state for the given half-step.
+    /// Recomputes every explicit force at the current state for the given half-step.
     pub(crate) fn evaluate_loads(&mut self, instant: Instant) {
         self.loads.clear();
         for force in &self.forces {
             force.apply(&self.bodies, instant, &mut self.loads);
+        }
+    }
+
+    pub(crate) fn prepare_constraints(&mut self) {
+        self.solver.prepare(&self.constraints, &self.bodies);
+        self.solver.kick_predictor(&mut self.bodies);
+    }
+
+    pub(crate) fn project_positions(&mut self, dt: f64) {
+        if !self.constraints.is_empty() {
+            self.solver
+                .project_positions(&self.constraints, &mut self.bodies, dt);
+        }
+    }
+
+    pub(crate) fn detect_contacts(&mut self) {
+        detect(&self.bodies, &mut self.contacts);
+    }
+
+    pub(crate) fn solve_velocities(&mut self, dt: f64, time: f64) {
+        let threshold = 4.0 * self.gravity.length() * dt + 1e-6;
+        self.impact_loss += self.solver.solve_velocities(
+            &self.constraints,
+            &self.contacts,
+            &mut self.bodies,
+            &mut self.loads,
+            dt,
+            time,
+            threshold,
+            &mut self.events,
+        );
+    }
+
+    /// Computes the reactions that hold at the initial state by solving one hypothetical step and discarding its
+    /// motion. This seeds the contact predictor and the energy ledger, and gives the first recorded sample real
+    /// tensions and normal forces.
+    pub(crate) fn initialize_reactions(&mut self, dt: f64) {
+        let velocities = self.bodies.velocities.clone();
+        let spins = self.bodies.angular_velocities.clone();
+        self.prepare_constraints();
+        self.detect_contacts();
+        for i in 0..self.bodies.len() {
+            self.bodies.velocities[i] +=
+                self.loads.forces[i] * (self.bodies.inverse_masses[i] * dt);
+            self.bodies.angular_velocities[i] +=
+                self.loads.torques[i] * self.bodies.inverse_inertias[i] * dt;
+        }
+        self.solve_velocities(dt, 0.0);
+        self.bodies.velocities = velocities;
+        self.bodies.angular_velocities = spins;
+        self.impact_loss = 0.0;
+    }
+
+    pub(crate) fn correct_positions(&mut self) {
+        if !self.contacts.is_empty() {
+            self.solver
+                .correct_positions(&self.constraints, &self.contacts, &mut self.bodies);
         }
     }
 
@@ -176,9 +217,10 @@ impl World {
     }
 
     /// Instantaneous power delivered by dissipative and external forces at the current state.
+    /// Impact impulses are excluded; their energy is accounted at the impact.
     pub(crate) fn power(&self) -> Power {
         let mut power = Power::default();
-        for sample in &self.loads.samples {
+        for sample in self.loads.samples.iter().filter(|s| !s.impulsive) {
             let rate = sample
                 .force
                 .dot(self.bodies.point_velocity(sample.body, sample.point))

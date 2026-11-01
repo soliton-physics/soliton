@@ -161,7 +161,7 @@ impl Constraint for Rope {
     fn rows(&self, bodies: &Bodies, index: usize, rows: &mut Rows) {
         let (length, attachments, _) = self.path(bodies);
         let slack = self.length - length;
-        rows.unilateral(index, self.label(), slack, slack <= TAUT_TOLERANCE);
+        rows.rope(index, self.label(), slack, slack <= TAUT_TOLERANCE);
         for a in &attachments {
             rows.at_point(bodies, a.body, -a.gradient, a.point);
         }

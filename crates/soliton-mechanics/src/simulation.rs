@@ -31,6 +31,7 @@ impl Simulation {
     ) -> Self {
         assert!(dt > 0.0, "time step must be positive");
         world.evaluate_loads(Instant::opening(0.0));
+        world.initialize_reactions(dt);
         let previous_power = world.power();
         Self {
             world,
@@ -106,6 +107,7 @@ impl Simulate for Simulation {
         self.steps += 1;
         self.time = self.steps as f64 * self.dt;
         self.events.append(&mut self.world.events);
+        self.dissipated += std::mem::take(&mut self.world.impact_loss);
 
         let power = self.world.power();
         self.dissipated += 0.5 * (self.previous_power.dissipative + power.dissipative) * self.dt;
