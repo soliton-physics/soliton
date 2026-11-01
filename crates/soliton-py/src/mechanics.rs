@@ -155,7 +155,7 @@ fn pairs<'py>(
 ) -> PyResult<Bound<'py, PyArray2<f64>>> {
     let flat: Vec<f64> = values.flat_map(|v| [v.x, v.y]).collect();
     let n = flat.len() / 2;
-    Ok(flat.into_pyarray(py).reshape([n, 2])?)
+    flat.into_pyarray(py).reshape([n, 2])
 }
 
 #[pymethods]
