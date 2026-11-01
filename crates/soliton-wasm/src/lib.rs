@@ -1,7 +1,7 @@
 use js_sys::{Float64Array, Object, Reflect};
 use num_complex::Complex64;
-use soliton_core::exact::{kdv_soliton, nls_bright_soliton};
-use soliton_core::{Kdv, Nls, PeriodicGrid, Simulation};
+use soliton_fields::exact::{kdv_soliton, nls_bright_soliton};
+use soliton_fields::{Kdv, Nls, PeriodicGrid, Simulate, Simulation};
 use wasm_bindgen::prelude::*;
 
 enum Engine {

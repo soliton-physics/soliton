@@ -1,5 +1,5 @@
-use soliton_core::exact::nls_bright_soliton;
-use soliton_core::{Nls, PeriodicGrid, Simulation};
+use soliton_fields::exact::nls_bright_soliton;
+use soliton_fields::{Nls, PeriodicGrid, Simulate, Simulation};
 
 #[test]
 fn moving_bright_soliton_matches_exact_solution() {

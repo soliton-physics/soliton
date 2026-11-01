@@ -3,11 +3,11 @@ use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use soliton_core::{exact, Kdv, Nls, PeriodicGrid};
+use soliton_fields::{exact, Kdv, Nls, PeriodicGrid, Simulate};
 
 enum Engine {
-    Kdv(soliton_core::Simulation<Kdv>),
-    Nls(soliton_core::Simulation<Nls>),
+    Kdv(soliton_fields::Simulation<Kdv>),
+    Nls(soliton_fields::Simulation<Nls>),
 }
 
 macro_rules! dispatch {
@@ -34,8 +34,8 @@ impl Simulation {
     fn new(model: &str, points: usize, length: f64, dt: f64) -> PyResult<Self> {
         let grid = PeriodicGrid::new(points, length);
         let engine = match model {
-            "kdv" => Engine::Kdv(soliton_core::Simulation::new(grid, Kdv, dt)),
-            "nls" => Engine::Nls(soliton_core::Simulation::new(grid, Nls, dt)),
+            "kdv" => Engine::Kdv(soliton_fields::Simulation::new(grid, Kdv, dt)),
+            "nls" => Engine::Nls(soliton_fields::Simulation::new(grid, Nls, dt)),
             other => return Err(PyValueError::new_err(format!("unknown model `{other}`"))),
         };
         Ok(Self { engine })

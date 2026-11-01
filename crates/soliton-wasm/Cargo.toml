@@ -12,7 +12,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-soliton-core = { workspace = true }
+soliton-fields = { workspace = true }
 num-complex = { workspace = true }
 wasm-bindgen = "0.2"
 js-sys = "0.3"

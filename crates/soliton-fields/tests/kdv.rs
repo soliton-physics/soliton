@@ -1,6 +1,6 @@
 use num_complex::Complex64;
-use soliton_core::exact::kdv_soliton;
-use soliton_core::{Kdv, PeriodicGrid, Simulation};
+use soliton_fields::exact::kdv_soliton;
+use soliton_fields::{Kdv, PeriodicGrid, Simulate, Simulation};
 
 fn max_error(simulation: &mut Simulation<Kdv>, speed: f64, center: f64) -> f64 {
     let t = simulation.time();
