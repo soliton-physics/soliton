@@ -38,18 +38,30 @@ conditions of ropes and contact are not a linear system. One iterative solver fo
 and at these sizes convergence to `1e-12` costs microseconds. A direct solve for pure-bilateral worlds is a
 later optimisation if profiling asks for it.
 
-## Position projection
+## Position projection: RATTLE
 
-Velocity constraints alone let positions drift by `O(dt²)` per step. After the velocity solve, a few Gauss–Seidel
-sweeps on the position constraints move bodies along `M⁻¹ Jᵀ` until `|C(x)| < 1e-10`. This is the SHAKE idea
-applied after Verlet, so the pair is second order and keeps the constraint manifold exactly. No Baumgarte spring
-term, which would add an artificial frequency a student could see.
+Velocity constraints alone let positions drift by `O(dt²)` per step. The scheme is RATTLE, which is Verlet with
+two projections:
+
+1. After the drift, SHAKE: Gauss–Seidel sweeps move bodies along `M⁻¹ Jᵀ` evaluated at the **start** of the step
+   until `|C(x)| < 1e-13`, and the half-step velocities receive the same correction divided by `dt`.
+2. After the final kick, the velocity projection above, along `Jᵀ` evaluated at the **new** positions.
+
+Both details matter. Using the current gradient instead of the start-of-step gradient in step 1 looks harmless and
+costs a first-order energy error: a pendulum at 2 rad amplitude lost 10 % of its energy over ten periods at
+`dt = 1e-4`. With the start-of-step gradient the drift is `1.4e-7` and second order. Skipping the velocity correction in
+step 1 (projecting positions only) leaves an `O(dt²)` energy noise several times larger than Verlet's own.
+
+No Baumgarte spring term, which would add an artificial frequency a student could see.
 
 ## Reaction forces
 
-The impulse on each row divided by `dt` is the constraint force for that step. It is reported in the force breakdown
-with the constraint's label and sign convention chosen so that tension is positive. For the Atwood machine this gives
-the textbook `T = 2 m₁ m₂ g / (m₁ + m₂)` to solver tolerance.
+Each row's position impulse (from SHAKE) plus its velocity impulse, divided by `dt`, is the constraint force for the
+step: RATTLE's two multipliers each cover half a step. It is reported in the force breakdown with the constraint's
+label and the sign convention `C = L − |d|` for rods and ropes so that tension is positive. For the Atwood machine
+this gives the textbook `T = 2 m₁ m₂ g / (m₁ + m₂)` to round-off, and the normal force on a block held by a slot is
+exactly `m g`. The position tolerance has to be tight because a position residual `ε` reports as a force error
+`ε / dt²`.
 
 ## Ropes and pulleys
 
@@ -73,12 +85,12 @@ Rope { nodes: [Attach(body_a, point), Fixed(p), Pulley(body_p, radius), Attach(b
 
 | Scenario | Checked | Tolerance |
 | --- | --- | --- |
-| Atwood machine | `a = (m₂ − m₁) g / (m₁ + m₂)`, `T` | 1e-10 |
-| block on table pulled by hanging mass over a pulley | `a`, `T` | 1e-10 |
-| simple pendulum (rod) small amplitude | period `2π√(L/g)` | `(ω dt)²/24` plus amplitude correction |
-| simple pendulum large amplitude | period via the complete elliptic integral | second-order convergence |
-| string in a vertical circle | slack event when `v² < g r` at the top; min bottom speed `√(5 g r)` | event time to `dt` |
-| seesaw with unequal masses | equilibrium when `m₁ d₁ = m₂ d₂`, otherwise angular acceleration | 1e-10 |
+| Atwood machine | `a = (m₂ − m₁) g / (m₁ + m₂)`, `T` | 1e-10 (measured: round-off) |
+| block on table pulled by hanging mass over a pulley | `a`, `T`, `N = m₁ g` | 1e-10 (measured: round-off) |
+| simple pendulum (rod) small amplitude | period `2π√(L/g)` | 1e-5 (measured 4e-7); energy drift 1e-10 |
+| simple pendulum, 2 rad amplitude | period via the complete elliptic integral | 1e-6 (measured 1.7e-8), order 2.0 |
+| string in a vertical circle | slack event only when launched below `√(5 g r)` | event present or absent |
+| seesaw with unequal masses | equilibrium when `m₁ d₁ = m₂ d₂`, otherwise angular acceleration | 1e-6 (measured 1e-9) |
 
 ## Rejected alternatives
 
