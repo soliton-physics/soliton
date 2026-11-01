@@ -32,16 +32,18 @@ Current accuracy on the reference tests: KdV soliton error `5e-8`, NLS soliton e
 
 ```
 crates/
-  soliton-core   numerical core: grids, FFT, equations, steppers, exact solutions
-  soliton-wasm   wasm-bindgen bindings consumed by the playground and docs
-  soliton-py     PyO3 bindings packaged with maturin as the `soliton` Python package
+  soliton-core        shared types: Vec2, Invariant, the Simulate trait
+  soliton-mechanics   planar rigid-body mechanics: bodies, forces, constraints, contact
+  soliton-fields      spectral solvers for wave equations: grids, FFT, ETDRK4, exact solutions
+  soliton-wasm        wasm-bindgen bindings consumed by the playground and docs
+  soliton-py          PyO3 bindings packaged with maturin as the `soliton` Python package
 ```
 
 ## Rust
 
 ```rust
-use soliton_core::exact::kdv_soliton;
-use soliton_core::{Complex64, Kdv, PeriodicGrid, Simulation};
+use soliton_fields::exact::kdv_soliton;
+use soliton_fields::{Complex64, Kdv, PeriodicGrid, Simulate, Simulation};
 
 let mut sim = Simulation::new(PeriodicGrid::new(512, 60.0), Kdv, 1e-3);
 sim.set_profile(|x| Complex64::new(kdv_soliton(x, 0.0, 4.0, -10.0), 0.0));

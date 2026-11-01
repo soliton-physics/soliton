@@ -287,9 +287,21 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 [[package]]
 name = "soliton-core"
 version = "0.1.0"
+
+[[package]]
+name = "soliton-fields"
+version = "0.1.0"
 dependencies = [
  "num-complex",
  "rustfft",
+ "soliton-core",
+]
+
+[[package]]
+name = "soliton-mechanics"
+version = "0.1.0"
+dependencies = [
+ "soliton-core",
 ]
 
 [[package]]
@@ -299,7 +311,7 @@ dependencies = [
  "num-complex",
  "numpy",
  "pyo3",
- "soliton-core",
+ "soliton-fields",
 ]
 
 [[package]]
@@ -308,7 +320,7 @@ version = "0.1.0"
 dependencies = [
  "js-sys",
  "num-complex",
- "soliton-core",
+ "soliton-fields",
  "wasm-bindgen",
 ]
 

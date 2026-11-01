@@ -1,7 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/soliton-core", "crates/soliton-wasm", "crates/soliton-py"]
-default-members = ["crates/soliton-core"]
+members = [
+    "crates/soliton-core",
+    "crates/soliton-fields",
+    "crates/soliton-mechanics",
+    "crates/soliton-wasm",
+    "crates/soliton-py",
+]
+default-members = ["crates/soliton-core", "crates/soliton-fields", "crates/soliton-mechanics"]
 
 [workspace.package]
 version = "0.1.0"
@@ -12,6 +18,8 @@ authors = ["Soliton Physics contributors"]
 
 [workspace.dependencies]
 soliton-core = { path = "crates/soliton-core", version = "0.1.0" }
+soliton-fields = { path = "crates/soliton-fields", version = "0.1.0" }
+soliton-mechanics = { path = "crates/soliton-mechanics", version = "0.1.0" }
 num-complex = "0.4"
 rustfft = "6.4"
 serde = { version = "1.0", features = ["derive"] }
