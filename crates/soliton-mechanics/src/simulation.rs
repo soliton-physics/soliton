@@ -105,6 +105,7 @@ impl Simulate for Simulation {
         self.integrator.step(&mut self.world, self.time, self.dt);
         self.steps += 1;
         self.time = self.steps as f64 * self.dt;
+        self.events.append(&mut self.world.events);
 
         let power = self.world.power();
         self.dissipated += 0.5 * (self.previous_power.dissipative + power.dissipative) * self.dt;

@@ -1,11 +1,17 @@
 use crate::body::{Bodies, Body, BodyId};
+use crate::constraint::Constraint;
+use crate::event::Event;
 use crate::force::{Force, ForceSample, Gravity, Instant, Loads, WorkClass};
+use crate::solver::ConstraintSolver;
 use soliton_core::Vec2;
 
 /// Bodies, the forces acting on them, and the loads those forces produced at the current state.
 pub struct World {
     pub(crate) bodies: Bodies,
     forces: Vec<Box<dyn Force>>,
+    constraints: Vec<Box<dyn Constraint>>,
+    solver: ConstraintSolver,
+    pub(crate) events: Vec<Event>,
     pub(crate) loads: Loads,
     gravity: Vec2,
     has_velocity_forces: bool,
@@ -17,6 +23,9 @@ impl World {
         let mut world = Self {
             bodies: Bodies::default(),
             forces: Vec::new(),
+            constraints: Vec::new(),
+            solver: ConstraintSolver::default(),
+            events: Vec::new(),
             loads: Loads::default(),
             gravity,
             has_velocity_forces: false,
@@ -38,8 +47,44 @@ impl World {
         self.forces.push(Box::new(force));
     }
 
+    /// Adds a constraint and returns its index, which events and reactions refer to.
+    pub fn add_constraint(&mut self, constraint: impl Constraint + 'static) -> usize {
+        self.constraints.push(Box::new(constraint));
+        self.constraints.len() - 1
+    }
+
     pub fn gravity(&self) -> Vec2 {
         self.gravity
+    }
+
+    pub fn constraint(&self, index: usize) -> &dyn Constraint {
+        self.constraints[index].as_ref()
+    }
+
+    pub(crate) fn prepare_constraints(&mut self) {
+        if !self.constraints.is_empty() {
+            self.solver.prepare(&self.constraints, &self.bodies);
+        }
+    }
+
+    pub(crate) fn project_positions(&mut self, dt: f64) {
+        if !self.constraints.is_empty() {
+            self.solver
+                .project_positions(&self.constraints, &mut self.bodies, dt);
+        }
+    }
+
+    pub(crate) fn solve_velocities(&mut self, dt: f64, time: f64) {
+        if !self.constraints.is_empty() {
+            self.solver.solve_velocities(
+                &self.constraints,
+                &mut self.bodies,
+                &mut self.loads,
+                dt,
+                time,
+                &mut self.events,
+            );
+        }
     }
 
     pub fn bodies(&self) -> &Bodies {
@@ -62,12 +107,15 @@ impl World {
         }
     }
 
+    /// Net acceleration including constraint and contact reactions.
     pub fn acceleration(&self, id: BodyId) -> Vec2 {
-        self.loads.forces[id.index()] * self.bodies.inverse_masses[id.index()]
+        let i = id.index();
+        (self.loads.forces[i] + self.loads.reactions[i]) * self.bodies.inverse_masses[i]
     }
 
     pub fn angular_acceleration(&self, id: BodyId) -> f64 {
-        self.loads.torques[id.index()] * self.bodies.inverse_inertias[id.index()]
+        let i = id.index();
+        (self.loads.torques[i] + self.loads.reaction_torques[i]) * self.bodies.inverse_inertias[i]
     }
 
     /// The free-body diagram of `id` at the current state.

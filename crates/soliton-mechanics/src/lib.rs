@@ -1,20 +1,25 @@
 //! Soliton Physics mechanics pillar.
 //!
-//! Planar rigid bodies under explicit forces, integrated with velocity Verlet. The engine reports every force it
-//! applies, so a free-body diagram is an output rather than a drawing. Design: `design/001-mechanics-core.md`.
+//! Planar rigid bodies under explicit forces and exact constraints, integrated with velocity Verlet and impulses.
+//! The engine reports every force it applies, so a free-body diagram is an output rather than a drawing.
+//! Designs: `design/001-mechanics-core.md`, `design/002-constraints-and-ropes.md`.
 
 mod body;
+mod constraint;
 mod energy;
 mod event;
 pub mod exact;
 mod force;
 mod integrator;
 mod record;
+mod rope;
 mod shape;
 mod simulation;
+mod solver;
 mod world;
 
 pub use body::{Bodies, Body, BodyId, BodyKind, Material};
+pub use constraint::{Constraint, Entry, FixedAngle, PinJoint, Rod, Row, Rows, Slot};
 pub use energy::EnergyLedger;
 pub use event::{Event, EventKind};
 pub use force::{
@@ -23,6 +28,7 @@ pub use force::{
 };
 pub use integrator::{Integrator, Verlet};
 pub use record::{BodyRecord, Recorder};
+pub use rope::{Rope, RopeNode, Wrap};
 pub use shape::{Circle, HalfPlane, Polygon, Shape};
 pub use simulation::Simulation;
 pub use soliton_core::{Invariant, Simulate, Vec2};
