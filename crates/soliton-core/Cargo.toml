@@ -1,0 +1,10 @@
+[package]
+name = "soliton-core"
+description = "Shared types for the Soliton Physics engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
