@@ -80,7 +80,7 @@ cd crates/soliton-wasm
 wasm-pack build --release --target web --scope soliton-physics
 ```
 
-The package lands in `crates/soliton-wasm/pkg` and is what the playground imports.
+The package lands in `crates/soliton-wasm/pkg`. The playground vendors it with `pnpm sync-engine`.
 
 ## Design
 
