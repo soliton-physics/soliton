@@ -14,6 +14,8 @@ mod force;
 mod integrator;
 mod record;
 mod rope;
+pub mod scenario;
+pub mod scene;
 mod shape;
 mod simulation;
 mod solver;

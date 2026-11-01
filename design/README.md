@@ -20,10 +20,10 @@ A document states the physics, the numerical method, the public API, and how the
 
 | # | Title | Status |
 | --- | --- | --- |
-| [001](001-mechanics-core.md) | Mechanics core: world, bodies, forces, integrators, recorder | Accepted |
-| [002](002-constraints-and-ropes.md) | Bilateral constraints, pin joints, ropes and pulleys | Accepted |
-| [003](003-contact-and-friction.md) | Contact, Coulomb friction, restitution, time stepping | Accepted |
-| [004](004-scenes-and-scenarios.md) | Scene format, parameters, the NCERT scenario catalogue | Accepted |
-| [005](005-python-and-jupyter.md) | Python package and notebook workflow | Accepted |
-| [006](006-playground-protocol.md) | What the WebAssembly layer exposes to the playground | Accepted |
+| [001](001-mechanics-core.md) | Mechanics core: world, bodies, forces, integrators, recorder | Implemented |
+| [002](002-constraints-and-ropes.md) | Bilateral constraints, pin joints, ropes and pulleys | Implemented |
+| [003](003-contact-and-friction.md) | Contact, Coulomb friction, restitution, time stepping | Implemented |
+| [004](004-scenes-and-scenarios.md) | Scene format, parameters, the NCERT scenario catalogue | Implemented |
+| [005](005-python-and-jupyter.md) | Python package and notebook workflow | Implemented (first slice) |
+| [006](006-playground-protocol.md) | What the WebAssembly layer exposes to the playground | Implemented |
 | [007](007-fields-baseline.md) | Spectral field solvers: what exists and what follows | Implemented (baseline) |

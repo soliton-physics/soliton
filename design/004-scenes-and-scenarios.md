@@ -1,6 +1,6 @@
 # 004: Scenes, parameters, and the NCERT scenario catalogue
 
-Status: Draft
+Status: Implemented
 
 ## Scenes are data
 
@@ -23,7 +23,14 @@ the Rust builder API produces it. Teachers share scenes as files.
 }
 ```
 
-The schema is versioned. `soliton-core` validates and upgrades old versions.
+The schema is versioned. `SceneFile::from_json` rejects other schema numbers by name, and `build` validates body ids,
+masses and shapes and names the problem. Polygon vertices may be written about any origin, for example in world
+coordinates for a static incline: the body's position absorbs the centroid.
+
+As implemented (`soliton_mechanics::scene`): the scenario builders produce a `SceneFile` first and the world is built
+from it, so the JSON a teacher exports from the playground is exactly what ran. The file round-trips bit for bit
+(`serde_json` with `float_roundtrip`), which `tests/scene.rs` checks for every scenario. Forces and constraints are
+externally tagged (`{"applied": {...}}`, `{"rope": {...}}`); ropes and rods without a length start taut.
 
 ## Parameters
 
@@ -41,6 +48,17 @@ package documents. Changing a slider rebuilds the scene from the function; there
 
 Each scenario exposes `exact(p: &Params) -> Vec<(name, value)>`: the textbook quantities for those parameters.
 The playground shows them beside the measured values. The tests assert they agree.
+
+## What is implemented
+
+`soliton_mechanics::scenario` holds the catalogue. Each scenario is a `ScenarioSpec` (id, title, description, syllabus,
+parameter schema, suggested `dt` and duration) and a builder from `Params` to a `Scene`: the world, one label per
+body, the body to focus, the textbook answers for those parameters, and a camera suggestion. Constraints and forces
+also provide drawing sketches (ropes with their pulleys, rods, springs, pivots) so the playground never guesses
+geometry. The first slice, in chapter order: free fall, ball thrown upward, projectile, projectile from a cliff, block
+on a rough incline, pushed block, Atwood machine, block on a table with a hanging mass, head-on collision, bob in a
+vertical circle, rolling down an incline, seesaw, mass on a spring, simple pendulum. `tests/catalogue.rs` checks each
+against its closed form.
 
 ## Catalogue, class 11
 
