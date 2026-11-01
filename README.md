@@ -90,13 +90,12 @@ The package lands in `crates/soliton-wasm/pkg`. The playground vendors it with `
   which keeps them exact for complex linear symbols such as dispersion.
 - Conserved quantities are part of the equation definition, so every simulation can report its own drift.
 
-## Roadmap
+## Design and roadmap
 
-- Sine-Gordon and modified KdV
-- Dealiasing filters and adaptive time stepping
-- Two-dimensional fields (NLS in 2D, Gross–Pitaevskii) with WebGPU rendering
-- Particle and rigid-body mechanics with symplectic integrators
-- Differentiable simulations for inverse problems
+The engine is designed in the open. [`design/`](design/) holds the architecture, conventions, the phased roadmap, and one
+design document per subsystem. Phase 1 is planar mechanics for the NCERT class 11 syllabus: bodies, forces, constraints,
+ropes and pulleys, contact with Coulomb friction, all validated against textbook answers. The wave solvers above are the
+first piece of the fields pillar and continue after that.
 
 ## License
 
