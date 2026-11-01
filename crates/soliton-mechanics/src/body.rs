@@ -8,6 +8,10 @@ impl BodyId {
     pub fn index(self) -> usize {
         self.0 as usize
     }
+
+    pub fn from_index(index: usize) -> Self {
+        Self(index as u32)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -16,8 +16,11 @@ A contact has a point, a unit normal from body A to body B, and a penetration de
 A polygon resting on a plane produces a two-point manifold, which is what lets a box rest flat and lets a block on a
 steep incline tip over instead of sliding, a classic question.
 
-Contacts are created when the gap is below a small activation distance (`1e-6` m by default) so that a block placed on
-a surface is in contact from the first step, not after falling into it.
+Contacts are created when the gap is below an activation distance of `1e-4` m, so that a block placed on a surface
+is in contact from the first step, and so that both corners of a resting box stay in the contact set while it settles.
+With a 1 µm margin the box rocked on alternate corners forever: after each position correction one corner sat a hair
+above the floor, dropped out of the set, and the predictor's single-corner reaction tipped the box onto the other.
+A contact with a positive gap carries no force, so the wider margin makes nothing hover.
 
 ## Time stepping
 
@@ -71,6 +74,12 @@ Per contact row, inside the Gauss–Seidel sweep, after the normal impulse is kn
 1. Compute the tangential impulse `λ_stick` that would bring relative tangential velocity to zero.
 2. If `|λ_stick| ≤ μ_s λ_n`: static friction holds. Apply `λ_stick`. The body does not slide.
 3. Otherwise: kinetic friction. Apply `λ_t = -μ_k λ_n · sign(v_t)`.
+
+Static friction shared between several contact points of one body is statically indeterminate, and the solver's
+warm start would otherwise carry an arbitrary equal-and-opposite pair forever (a resting box showing ±0.6 N of
+friction at its two corners). Each sweep therefore starts friction rows from half the predicted impulse: a leftover
+pair decays to zero within a few steps, while a genuinely loaded contact is restored exactly inside the sweep because
+the stick target is computed from the actual relative velocity.
 
 This is exactly the reasoning a student is taught, encoded per contact. Consequences that fall out without special
 cases:

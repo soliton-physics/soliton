@@ -1,4 +1,5 @@
 use crate::body::{Bodies, BodyId};
+use crate::constraint::Sketch;
 use soliton_core::Vec2;
 
 /// What a force is, for the free-body diagram and the energy ledger.
@@ -220,6 +221,10 @@ pub trait Force {
     fn potential_energy(&self, _bodies: &Bodies) -> f64 {
         0.0
     }
+
+    fn sketches(&self, _bodies: &Bodies) -> Vec<Sketch> {
+        Vec::new()
+    }
 }
 
 /// Uniform gravity on every dynamic body. Added by [`crate::World::new`].
@@ -403,6 +408,13 @@ impl Force for Spring {
     fn potential_energy(&self, bodies: &Bodies) -> f64 {
         let (_, extension) = self.extension(bodies);
         0.5 * self.stiffness * extension * extension
+    }
+
+    fn sketches(&self, bodies: &Bodies) -> Vec<Sketch> {
+        vec![Sketch::Spring(
+            self.a.world_point(bodies),
+            self.b.world_point(bodies),
+        )]
     }
 }
 

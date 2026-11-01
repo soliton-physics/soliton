@@ -140,12 +140,38 @@ impl Rows {
     }
 }
 
+/// How a constraint or force wants to be drawn. The engine knows the geometry; the playground only renders.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Sketch {
+    Line(Vec2, Vec2),
+    Polyline(Vec<Vec2>),
+    Circle { center: Vec2, radius: f64 },
+    Spring(Vec2, Vec2),
+    Pivot(Vec2),
+}
+
 /// A relation between bodies enforced exactly by impulses (design 002).
 pub trait Constraint {
     fn label(&self) -> ForceLabel;
 
     /// Appends this constraint's rows for the current positions. `index` identifies it in events and reactions.
     fn rows(&self, bodies: &Bodies, index: usize, rows: &mut Rows);
+
+    fn sketches(&self, _bodies: &Bodies) -> Vec<Sketch> {
+        Vec::new()
+    }
+
+    /// Two bodies this constraint joins rigidly enough that they should not collide with each other.
+    fn joined(&self) -> Option<(BodyId, BodyId)> {
+        None
+    }
+}
+
+fn joined_anchors(a: Anchor, b: Anchor) -> Option<(BodyId, BodyId)> {
+    match (a, b) {
+        (Anchor::Body { id: x, .. }, Anchor::Body { id: y, .. }) => Some((x, y)),
+        _ => None,
+    }
 }
 
 /// A point on a body coincides with a point in the world or on another body.
@@ -192,6 +218,14 @@ impl Constraint for PinJoint {
             anchor_entry(rows, bodies, self.b, -axis, pb);
         }
     }
+
+    fn sketches(&self, bodies: &Bodies) -> Vec<Sketch> {
+        vec![Sketch::Pivot(self.a.world_point(bodies))]
+    }
+
+    fn joined(&self) -> Option<(BodyId, BodyId)> {
+        joined_anchors(self.a, self.b)
+    }
 }
 
 /// Two anchors stay a fixed distance apart. Reports tension, positive when pulling the anchors together.
@@ -221,6 +255,13 @@ impl Constraint for Rod {
         rows.bilateral(index, self.label(), self.length - separation.length());
         anchor_entry(rows, bodies, self.a, direction, pa);
         anchor_entry(rows, bodies, self.b, -direction, pb);
+    }
+
+    fn sketches(&self, bodies: &Bodies) -> Vec<Sketch> {
+        vec![Sketch::Line(
+            self.a.world_point(bodies),
+            self.b.world_point(bodies),
+        )]
     }
 }
 

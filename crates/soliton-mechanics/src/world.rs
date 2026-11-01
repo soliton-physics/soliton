@@ -1,5 +1,5 @@
 use crate::body::{Bodies, Body, BodyId};
-use crate::constraint::Constraint;
+use crate::constraint::{Constraint, Sketch};
 use crate::contact::{detect, Contact};
 use crate::event::Event;
 use crate::force::{Force, ForceSample, Gravity, Instant, Loads, WorkClass};
@@ -13,6 +13,7 @@ pub struct World {
     constraints: Vec<Box<dyn Constraint>>,
     solver: ConstraintSolver,
     contacts: Vec<Contact>,
+    ignored_pairs: Vec<(BodyId, BodyId)>,
     pub(crate) events: Vec<Event>,
     pub(crate) impact_loss: f64,
     pub(crate) loads: Loads,
@@ -29,6 +30,7 @@ impl World {
             constraints: Vec::new(),
             solver: ConstraintSolver::default(),
             contacts: Vec::new(),
+            ignored_pairs: Vec::new(),
             events: Vec::new(),
             impact_loss: 0.0,
             loads: Loads::default(),
@@ -53,9 +55,20 @@ impl World {
     }
 
     /// Adds a constraint and returns its index, which events and reactions refer to.
+    /// Bodies joined by a pin or rod stop colliding with each other.
     pub fn add_constraint(&mut self, constraint: impl Constraint + 'static) -> usize {
+        if let Some((a, b)) = constraint.joined() {
+            self.ignore_collisions(a, b);
+        }
         self.constraints.push(Box::new(constraint));
         self.constraints.len() - 1
+    }
+
+    /// Prevents contact between two bodies, for example a mass that rides on a plank it is pinned to.
+    pub fn ignore_collisions(&mut self, a: BodyId, b: BodyId) {
+        if !self.ignored_pairs.contains(&(a, b)) && !self.ignored_pairs.contains(&(b, a)) {
+            self.ignored_pairs.push((a, b));
+        }
     }
 
     pub fn gravity(&self) -> Vec2 {
@@ -73,6 +86,18 @@ impl World {
     /// Contacts found by the last detection pass.
     pub fn contacts(&self) -> &[Contact] {
         &self.contacts
+    }
+
+    /// Drawing hints for everything that is not a body: ropes, pulleys, rods, springs, pivots.
+    pub fn sketches(&self) -> Vec<Sketch> {
+        let mut out = Vec::new();
+        for c in &self.constraints {
+            out.extend(c.sketches(&self.bodies));
+        }
+        for f in &self.forces {
+            out.extend(f.sketches(&self.bodies));
+        }
+        out
     }
 
     pub(crate) fn has_velocity_forces(&self) -> bool {
@@ -104,7 +129,7 @@ impl World {
     }
 
     pub(crate) fn detect_contacts(&mut self) {
-        detect(&self.bodies, &mut self.contacts);
+        detect(&self.bodies, &self.ignored_pairs, &mut self.contacts);
     }
 
     pub(crate) fn solve_velocities(&mut self, dt: f64, time: f64) {
@@ -125,6 +150,7 @@ impl World {
     /// motion. This seeds the contact predictor and the energy ledger, and gives the first recorded sample real
     /// tensions and normal forces.
     pub(crate) fn initialize_reactions(&mut self, dt: f64) {
+        self.solver.settle(&self.constraints, &mut self.bodies);
         let velocities = self.bodies.velocities.clone();
         let spins = self.bodies.angular_velocities.clone();
         self.prepare_constraints();

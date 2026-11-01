@@ -143,7 +143,10 @@ fn stopping_distance_and_work_energy_theorem() {
     );
     let distance = bodies.position(block).x;
     let expected = exact::stopping_distance(u, mu, G);
-    assert!(relative(distance, expected) < 1e-8, "distance {distance} vs {expected}");
+    assert!(
+        relative(distance, expected) < 1e-8,
+        "distance {distance} vs {expected}"
+    );
     let ledger = sim.energy();
     assert!(
         relative(ledger.dissipated, 0.5 * mass * u * u) < 1e-8,

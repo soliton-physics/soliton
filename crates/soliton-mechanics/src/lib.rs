@@ -20,7 +20,9 @@ mod solver;
 mod world;
 
 pub use body::{Bodies, Body, BodyId, BodyKind, Material};
-pub use constraint::{Constraint, Entry, FixedAngle, PinJoint, Rod, Row, RowKind, Rows, Slot};
+pub use constraint::{
+    Constraint, Entry, FixedAngle, PinJoint, Rod, Row, RowKind, Rows, Sketch, Slot,
+};
 pub use contact::Contact;
 pub use energy::EnergyLedger;
 pub use event::{Event, EventKind};

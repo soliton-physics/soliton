@@ -2,8 +2,9 @@ use crate::body::{Bodies, BodyId};
 use crate::shape::{Circle, HalfPlane, Polygon, Shape};
 use soliton_core::Vec2;
 
-/// Gap below which two surfaces are treated as touching, so a body placed on a surface is in contact at once.
-pub const ACTIVATION: f64 = 1e-6;
+/// Gap below which two surfaces are treated as touching. Wide enough that both corners of a resting box stay in
+/// the contact set while it settles; a contact with a positive gap carries no force, so nothing hovers.
+pub const ACTIVATION: f64 = 1e-4;
 
 /// A touching point between two bodies. The normal points from `a` to `b`; `depth` is positive when overlapping.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -24,8 +25,8 @@ struct Touch {
     feature: u32,
 }
 
-/// Every contact between every pair of bodies at the current positions.
-pub(crate) fn detect(bodies: &Bodies, out: &mut Vec<Contact>) {
+/// Every contact between every pair of bodies at the current positions, skipping `ignored` pairs.
+pub(crate) fn detect(bodies: &Bodies, ignored: &[(BodyId, BodyId)], out: &mut Vec<Contact>) {
     out.clear();
     let n = bodies.len();
     let mut touches = Vec::new();
@@ -33,6 +34,12 @@ pub(crate) fn detect(bodies: &Bodies, out: &mut Vec<Contact>) {
         for j in i + 1..n {
             let (a, b) = (BodyId(i as u32), BodyId(j as u32));
             if !bodies.is_dynamic(a) && !bodies.is_dynamic(b) {
+                continue;
+            }
+            if ignored
+                .iter()
+                .any(|&(x, y)| (x == a && y == b) || (x == b && y == a))
+            {
                 continue;
             }
             touches.clear();

@@ -52,6 +52,14 @@ costs a first-order energy error: a pendulum at 2 rad amplitude lost 10 % of its
 `dt = 1e-4`. With the start-of-step gradient the drift is `1.4e-7` and second order. Skipping the velocity correction in
 step 1 (projecting positions only) leaves an `O(dt²)` energy noise several times larger than Verlet's own.
 
+The position sweeps must be Gauss–Seidel: each row's error is re-evaluated after the rows before it have moved the
+bodies. Evaluating every error once per sweep is Jacobi iteration, which is not guaranteed to converge on a symmetric
+positive-definite system and in fact diverges on a seesaw with two masses pinned to the plank. Re-evaluating costs
+one rebuild of the rows per row per sweep, negligible at these sizes.
+
+Bodies joined by a pin or a rod do not collide with each other; otherwise a mass pinned onto a plank fights its own
+joint through contact.
+
 No Baumgarte spring term, which would add an artificial frequency a student could see.
 
 ## Reaction forces

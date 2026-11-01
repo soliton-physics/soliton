@@ -9,6 +9,7 @@ const VELOCITY_TOLERANCE: f64 = 1e-12;
 const POSITION_SWEEPS: usize = 50;
 const POSITION_TOLERANCE: f64 = 1e-13;
 const CONTACT_SWEEPS: usize = 10;
+const FRICTION_WARM_START: f64 = 0.5;
 
 /// What is remembered about a contact between steps: the whole-step impulses it delivered, whether it was an
 /// impact, and its friction state.
@@ -122,6 +123,9 @@ impl ConstraintSolver {
 
     /// SHAKE: moves bodies along the step-start `M⁻¹ Jᵀ` until the constraints hold at the new positions, and
     /// gives the half-step velocities the matching correction. The shifts are kept as impulses for the reaction report.
+    /// Each row's error is re-evaluated after the rows before it have moved the bodies (Gauss–Seidel); evaluating
+    /// all errors once per sweep (Jacobi) diverges on strongly coupled joints such as a seesaw with pinned masses.
+    #[allow(clippy::needless_range_loop)]
     pub(crate) fn project_positions(
         &mut self,
         constraints: &[Box<dyn Constraint>],
@@ -134,10 +138,12 @@ impl ConstraintSolver {
             .iter()
             .map(|row| Self::effective_mass(&self.start, bodies, row))
             .collect();
+        let n = self.start.len();
         for _ in 0..POSITION_SWEEPS {
-            Self::rebuild(&mut self.current, constraints, bodies);
             let mut worst: f64 = 0.0;
-            for (r, now) in self.current.rows.iter().enumerate() {
+            for r in 0..n {
+                Self::rebuild(&mut self.current, constraints, bodies);
+                let now = self.current.rows[r];
                 let violated = if now.unilateral() {
                     now.active && now.error < 0.0
                 } else {
@@ -221,7 +227,10 @@ impl ConstraintSolver {
             predicted[normal_row] = memory.map_or(0.0, |m| share * m.normal_impulse);
             predicted[friction_row] = memory.map_or(0.0, |m| share * m.tangent_impulse);
             self.impulses[normal_row] = predicted[normal_row];
-            self.impulses[friction_row] = predicted[friction_row];
+            // Static friction between several contact points of one body is statically indeterminate. Starting the
+            // sweep from a reduced guess lets a leftover equal-and-opposite pair decay to zero over a few steps,
+            // while a genuinely loaded contact is restored exactly within the sweep.
+            self.impulses[friction_row] = FRICTION_WARM_START * predicted[friction_row];
             sliding[k] = memory.is_some_and(|m| m.sliding);
             if !rows[normal_row].active {
                 self.impulses[normal_row] = 0.0;
@@ -456,27 +465,38 @@ impl ConstraintSolver {
                 break;
             }
         }
-        if moved && !constraints.is_empty() {
-            for _ in 0..POSITION_SWEEPS {
+        if moved {
+            self.settle(constraints, bodies);
+        }
+    }
+
+    /// Satisfies the constraints at the position level along the current gradients without touching velocities.
+    /// Used after contact corrections and once at construction, so a scene may start slightly inconsistent.
+    pub(crate) fn settle(&mut self, constraints: &[Box<dyn Constraint>], bodies: &mut Bodies) {
+        if constraints.is_empty() {
+            return;
+        }
+        Self::rebuild(&mut self.current, constraints, bodies);
+        let n = self.current.len();
+        for _ in 0..POSITION_SWEEPS {
+            let mut worst: f64 = 0.0;
+            for r in 0..n {
                 Self::rebuild(&mut self.current, constraints, bodies);
-                let mut worst: f64 = 0.0;
-                for r in 0..self.current.len() {
-                    let row = self.current.rows[r];
-                    let violated = if row.unilateral() {
-                        row.active && row.error < 0.0
-                    } else {
-                        true
-                    };
-                    let mass = Self::effective_mass(&self.current, bodies, &row);
-                    if !violated || mass == 0.0 {
-                        continue;
-                    }
-                    worst = worst.max(row.error.abs());
-                    Self::shift_positions(&self.current, bodies, &row, -row.error / mass);
+                let row = self.current.rows[r];
+                let violated = if row.unilateral() {
+                    row.active && row.error < 0.0
+                } else {
+                    true
+                };
+                let mass = Self::effective_mass(&self.current, bodies, &row);
+                if !violated || mass == 0.0 {
+                    continue;
                 }
-                if worst < POSITION_TOLERANCE {
-                    break;
-                }
+                worst = worst.max(row.error.abs());
+                Self::shift_positions(&self.current, bodies, &row, -row.error / mass);
+            }
+            if worst < POSITION_TOLERANCE {
+                break;
             }
         }
     }

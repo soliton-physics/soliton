@@ -53,6 +53,11 @@ impl Recorder {
         self.every
     }
 
+    /// Steps between samples.
+    pub fn interval_public(&self) -> u64 {
+        self.every
+    }
+
     pub fn samples(&self) -> usize {
         self.time.len()
     }

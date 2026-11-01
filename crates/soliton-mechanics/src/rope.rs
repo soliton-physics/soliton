@@ -1,5 +1,5 @@
 use crate::body::{Bodies, BodyId};
-use crate::constraint::{Constraint, Rows};
+use crate::constraint::{Constraint, Rows, Sketch};
 use crate::force::ForceLabel;
 use soliton_core::Vec2;
 use std::f64::consts::TAU;
@@ -166,6 +166,16 @@ impl Constraint for Rope {
             rows.at_point(bodies, a.body, -a.gradient, a.point);
         }
     }
+
+    fn sketches(&self, bodies: &Bodies) -> Vec<Sketch> {
+        let mut out = vec![Sketch::Polyline(self.path_points(bodies))];
+        for node in &self.nodes {
+            if let RopeNode::Pulley { center, radius, .. } = *node {
+                out.push(Sketch::Circle { center, radius });
+            }
+        }
+        out
+    }
 }
 
 /// Where a rope coming from `previous` touches a pulley, where it leaves towards `next`, and the arc between.
@@ -178,10 +188,10 @@ fn pulley_tangents(
     previous: Vec2,
     next: Vec2,
 ) -> (Vec2, Vec2, f64) {
+    // A point inside the pulley has no tangent; treat it as sitting on the rim so the geometry stays finite.
     let tangent_angle = |p: Vec2, sign: f64| {
         let d = p - center;
-        let distance = d.length();
-        assert!(distance > radius, "rope end point lies inside the pulley");
+        let distance = d.length().max(radius);
         d.angle() + sign * (radius / distance).acos()
     };
     let sign = match wrap {
