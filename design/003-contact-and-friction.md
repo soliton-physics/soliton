@@ -114,14 +114,19 @@ integrator's accuracy. This turns "where did the energy go" into a number on scr
 | oblique elastic collision of equal discs | momentum, energy, 90° scattering | 1e-10 |
 | rolling disc on incline, `μ_s` sufficient | `a = g sin θ / (1 + I/mR²)`, `v = ω R`, no slip event | 1e-8 |
 | rolling disc, `μ_s` too small | `a = g (sin θ − μ_k cos θ)`, rim lags, one slip event | 1e-8 |
-| bouncing ball, `e = 0.8` | successive apex ratios `e²` | 2e-2 (4e-4 at `dt = 1e-4`; impact timing is first order) |
+| bouncing ball, `e = 0.8` | successive apex ratios `e²`, first landing time | 5e-5 (measured 2.1e-5), 1e-6 s |
 | box on the floor | rests flat, two-point manifold, `N = m g` | 1e-10 |
 | ladder on a smooth wall | stays for `μ ≥ 1.3 μ_min`, slides for `0.7 μ_min` | event |
 
-## Known limits
+## Impact timing
 
-- Impact times are located to within a step, so bounce apex heights carry an `O(dt)` error (4e-4 relative at
-  `dt = 1e-4`). Phase 2 interpolates the impact time.
+A contact is found after the drift, so an impact is detected up to one step late with overlap `depth`. The solver
+estimates the delay `δ = depth / |v_n|`, corrects the approach speed for the acceleration gained during `δ`, aims the
+rebound velocity at what it would be after decelerating for `δ`, places the body where it would be having rebounded
+for `δ`, and reports the `ContactBegin` event at `t − δ`. Bounce apex ratios then match `e²` to 3e-5 (from 4e-4) and a
+dropped ball's landing time is reported to 1e-6 s.
+
+## Known limits
 - A contact that ends receives one spurious half-step of predicted reaction, also `O(dt)` and only at the event.
 - Sliding friction uses the velocity at the end of the step for the stick test, so a block comes to rest at a step
   boundary; the position error this causes is below round-off in the tests above.

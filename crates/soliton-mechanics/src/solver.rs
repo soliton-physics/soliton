@@ -36,6 +36,8 @@ pub(crate) struct ConstraintSolver {
     position_impulses: Vec<f64>,
     taut: Vec<bool>,
     memory: Vec<ContactMemory>,
+    /// How long before the end of the step each current contact's impact happened; zero for persistent contacts.
+    impact_delays: Vec<f64>,
     /// Contact rows of the previous step, in `memory` order, for the predictor kick.
     previous_contact_rows: Rows,
     touching_pairs: Vec<(BodyId, BodyId)>,
@@ -197,6 +199,7 @@ impl ConstraintSolver {
         dt: f64,
         time: f64,
         restitution_threshold: f64,
+        accelerations: &[f64],
         events: &mut Vec<Event>,
     ) -> f64 {
         Self::rebuild(&mut self.current, constraints, bodies);
@@ -238,22 +241,28 @@ impl ConstraintSolver {
             }
         }
 
-        // Restitution targets from the pre-impact approach speed.
+        // Restitution targets from the approach speed at the moment of impact. The contact was found after the
+        // drift, at most `dt` late: the bodies overlap by `depth`, so the impact happened `δ = depth / |v_n|` ago.
+        // Over that time the approach speed grew by `a_n δ` and the rebound has already decelerated by the same, so
+        // the velocity to aim for at the end of the step is `-e (v_n - a_n δ) + a_n δ`. This makes bounce heights
+        // and landing times second order instead of first (design 003, impact timing).
         let pre: Vec<f64> = rows
             .iter()
             .map(|row| Self::relative_velocity(&self.current, bodies, row))
             .collect();
+        let mut impact_delay = vec![0.0; contacts.len()];
         for (r, row) in rows.iter_mut().enumerate() {
             if let RowKind::Normal = row.kind {
-                let restitution = {
-                    let c = &contacts[row.source];
-                    bodies
-                        .material(c.a)
-                        .restitution
-                        .min(bodies.material(c.b).restitution)
-                };
+                let c = &contacts[row.source];
+                let restitution = bodies
+                    .material(c.a)
+                    .restitution
+                    .min(bodies.material(c.b).restitution);
                 if row.active && pre[r] < -restitution_threshold {
-                    row.bias = -restitution * pre[r];
+                    let delay = (c.depth.max(0.0) / -pre[r]).min(dt);
+                    let approach = pre[r] - accelerations[row.source] * delay;
+                    row.bias = -restitution * approach + accelerations[row.source] * delay;
+                    impact_delay[row.source] = delay;
                     impulsive[r] = true;
                     impulsive[r + 1] = true;
                 }
@@ -383,12 +392,19 @@ impl ConstraintSolver {
         }
         for &(a, b) in &touching {
             if !self.touching_pairs.contains(&(a, b)) {
+                let delay = contacts
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, c)| c.a == a && c.b == b)
+                    .map(|(k, _)| impact_delay[k])
+                    .fold(0.0, f64::max);
                 events.push(Event {
-                    time,
+                    time: time - delay,
                     kind: EventKind::ContactBegin { a, b },
                 });
             }
         }
+        self.impact_delays = impact_delay;
         for &(a, b) in &self.touching_pairs {
             if !touching.contains(&(a, b)) {
                 events.push(Event {
@@ -449,7 +465,10 @@ impl ConstraintSolver {
                             + e.angular * (bodies.angles[i] - angles[i])
                     })
                     .sum();
-                let gap = -c.depth + displacement;
+                // An impact found `delay` late should already have rebounded for that long.
+                let rebound = self.impact_delays.get(k).copied().unwrap_or(0.0)
+                    * Self::relative_velocity(&self.current, bodies, &row).max(0.0);
+                let gap = -c.depth + displacement - rebound;
                 if gap >= -POSITION_TOLERANCE {
                     continue;
                 }

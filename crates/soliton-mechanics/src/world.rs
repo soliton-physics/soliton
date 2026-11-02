@@ -134,6 +134,13 @@ impl World {
 
     pub(crate) fn solve_velocities(&mut self, dt: f64, time: f64) {
         let threshold = 4.0 * self.gravity.length() * dt + 1e-6;
+        let explicit =
+            |id: BodyId| self.loads.forces[id.index()] * self.bodies.inverse_masses[id.index()];
+        let accelerations: Vec<f64> = self
+            .contacts
+            .iter()
+            .map(|c| c.normal.dot(explicit(c.b) - explicit(c.a)))
+            .collect();
         self.impact_loss += self.solver.solve_velocities(
             &self.constraints,
             &self.contacts,
@@ -142,6 +149,7 @@ impl World {
             dt,
             time,
             threshold,
+            &accelerations,
             &mut self.events,
         );
     }

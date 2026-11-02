@@ -343,11 +343,22 @@ fn bouncing_ball_heights_follow_restitution_squared() {
     for pair in apexes.windows(2).take(3) {
         let ratio = pair[1] / pair[0];
         assert!(
-            relative(ratio, e * e) < 2e-2,
+            relative(ratio, e * e) < 5e-5,
             "apex ratio {ratio} vs {}",
             e * e
         );
     }
+    let landing = sim
+        .events()
+        .iter()
+        .find(|ev| matches!(ev.kind, EventKind::ContactBegin { .. }))
+        .unwrap()
+        .time;
+    let expected = (2.0 / G).sqrt();
+    assert!(
+        (landing - expected).abs() < 1e-6,
+        "first landing at {landing} vs {expected}"
+    );
     let bounces = count(&sim, |k| matches!(k, EventKind::ContactBegin { .. }));
     assert!(bounces >= 4);
 }
