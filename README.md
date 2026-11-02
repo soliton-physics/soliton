@@ -92,6 +92,11 @@ The package lands in `crates/soliton-wasm/pkg`. The playground vendors it with `
   which keeps them exact for complex linear symbols such as dispersion.
 - Conserved quantities are part of the equation definition, so every simulation can report its own drift.
 
+## Releases
+
+Tag `vX.Y.Z` on `main` and the release workflow publishes `soliton-physics` to PyPI (abi3 wheels for Linux, macOS
+and Windows, via trusted publishing) and `@soliton-physics/engine` to npm.
+
 ## Design and roadmap
 
 The engine is designed in the open. [`design/`](design/) holds the architecture, conventions, the phased roadmap, and one

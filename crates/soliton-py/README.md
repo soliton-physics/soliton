@@ -1,6 +1,17 @@
-# soliton
+# soliton-physics
 
-Python bindings for the [Soliton Physics](https://github.com/soliton-physics/soliton) engine.
+Python bindings for the [Soliton Physics](https://github.com/soliton-physics/soliton) engine: `pip install soliton-physics`, then `import soliton`.
+
+```python
+from soliton import mechanics
+
+scene = mechanics.scenario("atwood", m1=2, m2=3)
+scene.answers()
+run = scene.run(until=2.0)
+run.body("m2")["velocity"]
+```
+
+The wave solvers:
 
 ```python
 import numpy as np
