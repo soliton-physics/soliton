@@ -95,7 +95,8 @@ The package lands in `crates/soliton-wasm/pkg`. The playground vendors it with `
 ## Releases
 
 Tag `vX.Y.Z` on `main` and the release workflow publishes `soliton-physics` to PyPI (abi3 wheels for Linux, macOS
-and Windows, via trusted publishing) and `@soliton-physics/engine` to npm.
+and Windows) and `@soliton-physics/engine` to npm. Both use trusted publishing through GitHub's OIDC token, so the
+repository holds no registry credentials.
 
 ## Design and roadmap
 

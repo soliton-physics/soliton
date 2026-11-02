@@ -71,9 +71,9 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: wasm-pack build --release --target web --out-dir pkg --scope soliton-physics
         working-directory: crates/soliton-wasm
+      # Trusted publishing (OIDC) needs npm 11.5 or newer; no token is involved.
+      - run: npm install -g npm@latest
       - run: npm pkg set name=@soliton-physics/engine && npm pkg set 'keywords[]=physics'
         working-directory: crates/soliton-wasm/pkg
       - run: npm publish --access public --provenance
         working-directory: crates/soliton-wasm/pkg
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
