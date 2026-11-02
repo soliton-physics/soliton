@@ -18,10 +18,10 @@ Exit: every row in the catalogue table passes its closed-form test; three teache
 
 ## Phase 2: Rotation, gravitation, class 12 fields
 
-- Massive pulleys with no-slip rope, flywheels, rolling that emerges from friction
+- ~~Massive pulleys with no-slip rope, flywheels~~ done; rolling that emerges from friction (done in phase 1)
 - Newtonian gravity between bodies: orbits, Kepler's laws, escape velocity
 - Oscillations beyond the basics: damped, driven, resonance curves, coupled oscillators
-- Event timing by interpolation so reported impact and landing times are accurate to second order
+- ~~Event timing by interpolation so reported impact and landing times are accurate to second order~~ done
 
 Held until a teacher asks for it: charged particles in uniform electric and magnetic fields (class 12). The force
 generators are cheap, so this can be pulled forward at any time.
@@ -35,6 +35,6 @@ generators are cheap, so this can be pulled forward at any time.
 
 ## Phase 4: Research tooling
 
-- PyPI and npm releases, versioned scene schema
+- ~~PyPI and npm releases, versioned scene schema~~ release workflow in place
 - Inverse scattering diagnostics for the wave solvers
 - Discrete adjoints for parameter fitting

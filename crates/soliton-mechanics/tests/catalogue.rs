@@ -157,3 +157,25 @@ fn pendulum_scenario_period() {
     let measured = (crossings[crossings.len() - 1] - crossings[0]) / (crossings.len() - 1) as f64;
     assert!(relative(measured, period) < 1e-5, "{measured} vs {period}");
 }
+
+#[test]
+fn massive_pulley_scenarios_match_their_answers() {
+    for (id, body) in [("atwood-massive", "m2"), ("flywheel", "mass")] {
+        let (scene, answers) = build(id, Params::default());
+        let a = exact(&answers, "Acceleration");
+        let focus = scene.labels.iter().position(|l| l == body).unwrap();
+        let mut sim = Simulation::new(scene.world, scene.dt);
+        sim.advance(500);
+        let v = sim
+            .world()
+            .bodies()
+            .velocity(BodyId::from_index(focus))
+            .y
+            .abs();
+        assert!(
+            relative(v, a * sim.time()) < 1e-7,
+            "{id}: v {v} vs {}",
+            a * sim.time()
+        );
+    }
+}

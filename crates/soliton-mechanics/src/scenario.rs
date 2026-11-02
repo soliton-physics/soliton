@@ -678,6 +678,131 @@ fn rolling(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         )
 }
 
+static ATWOOD_MASSIVE: [Param; 3] = [
+    param("m1", "Left mass", "kg", (0.1, 10.0), 0.1, 2.0),
+    param("m2", "Right mass", "kg", (0.1, 10.0), 0.1, 3.0),
+    param(
+        "pulley_mass",
+        "Pulley mass (uniform disc)",
+        "kg",
+        (0.0, 20.0),
+        0.5,
+        4.0,
+    ),
+];
+
+fn atwood_massive(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m1, m2, pulley_mass) = (
+        p.get(spec, "m1"),
+        p.get(spec, "m2"),
+        p.get(spec, "pulley_mass").max(1e-6),
+    );
+    let radius = 0.4;
+    let a = exact::atwood_massive_acceleration(m1, m2, pulley_mass, G);
+    scene(spec)
+        .body(
+            BodySpec::fixed(
+                "floor",
+                ShapeSpec::Halfplane {
+                    normal: [0.0, 1.0],
+                    offset: -7.5,
+                },
+            )
+            .friction(0.5, 0.4),
+        )
+        .body(BodySpec::rigid(
+            "pulley",
+            pulley_mass,
+            ShapeSpec::Circle(radius),
+        ))
+        .body(ball("m1", m1, 0.2).at(-radius, -5.0).restitution(0.0))
+        .body(ball("m2", m2, 0.2).at(radius, -5.0).restitution(0.0))
+        .constraint(ConstraintSpec::Pin {
+            a: AnchorSpec::body("pulley"),
+            b: AnchorSpec::Fixed([0.0, 0.0]),
+        })
+        .constraint(ConstraintSpec::Rope {
+            nodes: vec![
+                RopeNodeSpec::attach("m1"),
+                RopeNodeSpec::Wheel {
+                    body: "pulley".into(),
+                    radius,
+                    wrap: WrapSpec::Clockwise,
+                },
+                RopeNodeSpec::attach("m2"),
+            ],
+            length: None,
+        })
+        .focus(if m2 >= m1 { "m2" } else { "m1" })
+        .answer("Acceleration (m/s²)", a.abs())
+        .answer("Tension on the left (N)", m1 * (G + a))
+        .answer("Tension on the right (N)", m2 * (G - a))
+        .answer(
+            "Angular acceleration of the pulley (rad/s²)",
+            a.abs() / radius,
+        )
+        .view([0.0, -3.8], 4.3)
+}
+
+static FLYWHEEL: [Param; 3] = [
+    param(
+        "wheel_mass",
+        "Wheel mass (uniform disc)",
+        "kg",
+        (0.5, 50.0),
+        0.5,
+        10.0,
+    ),
+    param("radius", "Wheel radius", "m", (0.1, 1.0), 0.05, 0.5),
+    param("mass", "Hanging mass", "kg", (0.1, 10.0), 0.1, 2.0),
+];
+
+fn flywheel(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (wheel_mass, radius, m) = (
+        p.get(spec, "wheel_mass"),
+        p.get(spec, "radius"),
+        p.get(spec, "mass"),
+    );
+    let a = m * G / (m + 0.5 * wheel_mass);
+    scene(spec)
+        .body(
+            BodySpec::fixed(
+                "floor",
+                ShapeSpec::Halfplane {
+                    normal: [0.0, 1.0],
+                    offset: -9.0,
+                },
+            )
+            .friction(0.5, 0.4),
+        )
+        .body(BodySpec::rigid(
+            "wheel",
+            wheel_mass,
+            ShapeSpec::Circle(radius),
+        ))
+        .body(ball("mass", m, 0.15).at(radius, -2.5).restitution(0.0))
+        .constraint(ConstraintSpec::Pin {
+            a: AnchorSpec::body("wheel"),
+            b: AnchorSpec::Fixed([0.0, 0.0]),
+        })
+        .constraint(ConstraintSpec::Rope {
+            nodes: vec![
+                RopeNodeSpec::Wheel {
+                    body: "wheel".into(),
+                    radius,
+                    wrap: WrapSpec::Clockwise,
+                },
+                RopeNodeSpec::attach("mass"),
+            ],
+            length: None,
+        })
+        .focus("mass")
+        .answer("Acceleration of the mass (m/s²)", a)
+        .answer("Tension (N)", m * (G - a))
+        .answer("Angular acceleration of the wheel (rad/s²)", a / radius)
+        .view([0.0, -4.0], 5.2)
+}
+
 static SEESAW: [Param; 4] = [
     param("m1", "Left mass", "kg", (0.5, 10.0), 0.5, 3.0),
     param("d1", "Left distance", "m", (0.2, 2.0), 0.1, 1.0),
@@ -876,6 +1001,14 @@ static CATALOGUE: &[Scenario] = &[
     Scenario {
         spec: spec("rolling", "Rolling down an incline", "Friction makes it roll instead of slide, but only if there is enough of it. Compare a disc and a ring.", "System of particles and rotational motion", "rolling motion", &ROLLING, 1e-3, 3.0),
         describe: rolling,
+    },
+    Scenario {
+        spec: spec("atwood-massive", "Atwood machine with a massive pulley", "Now the pulley has to be spun up too. The tensions on the two sides differ, and that difference is what turns the pulley.", "System of particles and rotational motion", "rotational dynamics", &ATWOOD_MASSIVE, 1e-3, 2.0),
+        describe: atwood_massive,
+    },
+    Scenario {
+        spec: spec("flywheel", "Flywheel with a hanging mass", "A string wound on a heavy wheel is pulled by a falling mass. The heavier the wheel, the slower the mass falls.", "System of particles and rotational motion", "rotational dynamics", &FLYWHEEL, 1e-3, 3.0),
+        describe: flywheel,
     },
     Scenario {
         spec: spec("seesaw", "Seesaw", "Balance needs equal torques, not equal masses. Move a mass outward and watch the plank tip.", "System of particles and rotational motion", "torque and equilibrium", &SEESAW, 1e-3, 3.0),
