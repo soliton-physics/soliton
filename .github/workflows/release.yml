@@ -67,7 +67,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: npm install -g wasm-pack
+      - name: Install wasm-pack
+        run: |
+          curl -sSL https://github.com/rustwasm/wasm-pack/releases/download/v0.13.1/wasm-pack-v0.13.1-x86_64-unknown-linux-musl.tar.gz -o wasm-pack.tar.gz
+          tar xzf wasm-pack.tar.gz
+          mv wasm-pack-v0.13.1-x86_64-unknown-linux-musl/wasm-pack "$HOME/.cargo/bin/"
+          wasm-pack --version
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -78,5 +83,6 @@ jobs:
       - run: npm install -g npm@latest
       - run: npm pkg set name=@soliton-physics/engine && npm pkg set 'keywords[]=physics'
         working-directory: crates/soliton-wasm/pkg
-      - run: npm publish --access public --provenance
+      - run: npm --version && echo "id-token request url present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+      - run: npm publish --access public --provenance --loglevel info
         working-directory: crates/soliton-wasm/pkg
