@@ -83,6 +83,9 @@ jobs:
       - run: npm install -g npm@latest
       - run: npm pkg set name=@soliton-physics/engine && npm pkg set 'keywords[]=physics'
         working-directory: crates/soliton-wasm/pkg
-      - run: npm --version && echo "id-token request url present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+      - name: Show npm version and OIDC availability
+        run: |
+          npm --version
+          echo "id-token request url present=${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
       - run: npm publish --access public --provenance --loglevel info
         working-directory: crates/soliton-wasm/pkg
