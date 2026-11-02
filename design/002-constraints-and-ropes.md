@@ -80,11 +80,14 @@ Rope { nodes: [Attach(body_a, point), Fixed(p), Pulley(body_p, radius), Attach(b
 ```
 
 - Path length is the sum of straight segments between consecutive nodes. A `Fixed` node is a frictionless peg.
-- A `Pulley` node with `no_slip: false` (Phase 1) is a massless pulley: the rope bends around it with the tangent
+- A `Pulley` node is a massless pulley: the rope bends around it with the tangent
   geometry of a circle of the given radius, so the segment directions are correct for a pulley of finite size.
-- A `Pulley` node with `no_slip: true` (Phase 2) adds a row coupling the rope speed to the pulley's rim speed
-  `ω R`, so a massive pulley accelerates with the blocks and tension differs on its two sides, as in NCERT's flywheel
-  and massive-pulley problems.
+- A `Wheel` node is a rigid body the rope wraps without slipping. The rope's tangent points are treated as material
+  points of the rim, the rope is split into one row per segment between wheels, and each segment's row gets entries
+  for the wheel at its tangent point. The wheel's rotation is then coupled through ordinary point Jacobians, with no
+  special no-slip row, and the tensions on the two sides differ by exactly the torque that spins the wheel. Rope
+  wound on the rim between the tangent points is assumed to move with the rim, so the wrap angle should not change
+  much during a run (true for pinned wheels with fixed-direction segments).
 - The rope row is unilateral: `C = L - path_length ≥ 0`, `λ ≥ 0`. When `C > 0` the rope is slack and applies nothing.
   The transition emits `Event::RopeSlack` or `Event::RopeTaut`. A string in a vertical circle goes slack exactly when
   the required tension would be negative, which is the condition students compute.
@@ -99,6 +102,8 @@ Rope { nodes: [Attach(body_a, point), Fixed(p), Pulley(body_p, radius), Attach(b
 | simple pendulum, 2 rad amplitude | period via the complete elliptic integral | 1e-6 (measured 1.7e-8), order 2.0 |
 | string in a vertical circle | slack event only when launched below `√(5 g r)` | event present or absent |
 | seesaw with unequal masses | equilibrium when `m₁ d₁ = m₂ d₂`, otherwise angular acceleration | 1e-6 (measured 1e-9) |
+| Atwood with a disc pulley | `a = (m₂ − m₁) g / (m₁ + m₂ + M/2)`, `T₁ = m₁(g + a)`, `T₂ = m₂(g − a)`, `v = ω R` | 1e-8 |
+| flywheel with a hanging mass | `a = m g / (m + M/2)` | 1e-8 |
 
 ## Rejected alternatives
 

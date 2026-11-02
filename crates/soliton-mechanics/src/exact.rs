@@ -123,3 +123,8 @@ pub fn stopping_distance(u: f64, mu: f64, g: f64) -> f64 {
 pub fn ladder_min_friction(theta: f64) -> f64 {
     0.5 / theta.tan()
 }
+
+/// Acceleration of an Atwood machine whose pulley is a uniform disc of mass `pulley_mass`, positive when `m2` descends.
+pub fn atwood_massive_acceleration(m1: f64, m2: f64, pulley_mass: f64, g: f64) -> f64 {
+    (m2 - m1) * g / (m1 + m2 + 0.5 * pulley_mass)
+}

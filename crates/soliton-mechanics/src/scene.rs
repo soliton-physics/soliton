@@ -286,6 +286,12 @@ pub enum RopeNodeSpec {
         radius: f64,
         wrap: WrapSpec,
     },
+    /// A rigid body the rope wraps without slipping; its rotation follows the rope.
+    Wheel {
+        body: String,
+        radius: f64,
+        wrap: WrapSpec,
+    },
 }
 
 impl RopeNodeSpec {
@@ -550,6 +556,14 @@ impl SceneFile {
                                 local: v(*local),
                             },
                             RopeNodeSpec::Peg(p) => RopeNode::Peg(v(*p)),
+                            RopeNodeSpec::Wheel { body, radius, wrap } => RopeNode::Wheel {
+                                body: lookup(body)?,
+                                radius: *radius,
+                                wrap: match wrap {
+                                    WrapSpec::Clockwise => Wrap::Clockwise,
+                                    WrapSpec::CounterClockwise => Wrap::CounterClockwise,
+                                },
+                            },
                             RopeNodeSpec::Pulley {
                                 center,
                                 radius,
@@ -565,7 +579,9 @@ impl SceneFile {
                         });
                     }
                     let rope = match length {
-                        Some(length) => Rope::new(built, *length),
+                        Some(length) => {
+                            Rope::taut(built, world.bodies()).with_length(world.bodies(), *length)
+                        }
                         None => Rope::taut(built, world.bodies()),
                     };
                     world.add_constraint(rope);

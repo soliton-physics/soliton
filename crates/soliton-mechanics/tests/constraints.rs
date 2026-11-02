@@ -231,3 +231,94 @@ fn seesaw_balances_or_tips_as_the_torques_say() {
         "alpha {alpha} expected {expected}"
     );
 }
+
+#[test]
+fn massive_pulley_shares_the_load_between_two_tensions() {
+    let (m1, m2, pulley_mass, radius) = (2.0, 3.0, 4.0, 0.4);
+    let mut world = World::new(Vec2::new(0.0, -G));
+    let pulley = world.add(Body::rigid(
+        pulley_mass,
+        soliton_mechanics::Circle::new(radius),
+    ));
+    let left = world.add(Body::particle(m1).at(-radius, -3.0));
+    let right = world.add(Body::particle(m2).at(radius, -3.0));
+    world.add_constraint(PinJoint::to_world(pulley, Vec2::ZERO, Vec2::ZERO));
+    let wheel = RopeNode::Wheel {
+        body: pulley,
+        radius,
+        wrap: Wrap::Clockwise,
+    };
+    world.add_constraint(Rope::taut(
+        [RopeNode::attach(left), wheel, RopeNode::attach(right)],
+        world.bodies(),
+    ));
+
+    let mut sim = Simulation::new(world, 1e-3);
+    let mut recorder = Recorder::every(1);
+    sim.run_until(1.0, &mut recorder);
+
+    let a = exact::atwood_massive_acceleration(m1, m2, pulley_mass, G);
+    let t = sim.time();
+    let bodies = sim.world().bodies();
+    assert!(
+        relative(bodies.velocity(right).y, -a * t) < 1e-8,
+        "v = {}",
+        bodies.velocity(right).y
+    );
+    assert!(
+        relative(bodies.angular_velocity(pulley).abs() * radius, a * t) < 1e-8,
+        "no slip on the rim"
+    );
+    let t_left = recorder
+        .force(left, ForceLabel::Tension)
+        .last()
+        .unwrap()
+        .length();
+    let t_right = recorder
+        .force(right, ForceLabel::Tension)
+        .last()
+        .unwrap()
+        .length();
+    assert!(
+        relative(t_left, m1 * (G + a)) < 1e-8,
+        "left tension {t_left}"
+    );
+    assert!(
+        relative(t_right, m2 * (G - a)) < 1e-8,
+        "right tension {t_right}"
+    );
+    assert!(
+        t_left < t_right,
+        "the heavier side must pull harder to spin the pulley"
+    );
+}
+
+#[test]
+fn flywheel_unwinds_at_the_textbook_rate() {
+    let (wheel_mass, radius, m) = (10.0, 0.5, 2.0);
+    let mut world = World::new(Vec2::new(0.0, -G));
+    let wheel = world.add(Body::rigid(
+        wheel_mass,
+        soliton_mechanics::Circle::new(radius),
+    ));
+    let mass = world.add(Body::particle(m).at(radius, -2.0));
+    world.add_constraint(PinJoint::to_world(wheel, Vec2::ZERO, Vec2::ZERO));
+    let rim = RopeNode::Wheel {
+        body: wheel,
+        radius,
+        wrap: Wrap::Clockwise,
+    };
+    world.add_constraint(Rope::taut([rim, RopeNode::attach(mass)], world.bodies()));
+
+    let mut sim = Simulation::new(world, 1e-3);
+    sim.advance(1000);
+    let a = m * G / (m + 0.5 * wheel_mass);
+    let bodies = sim.world().bodies();
+    assert!(relative(-bodies.velocity(mass).y, a * sim.time()) < 1e-8);
+    assert!(
+        relative(
+            bodies.angular_velocity(wheel).abs() * radius,
+            a * sim.time()
+        ) < 1e-8
+    );
+}
