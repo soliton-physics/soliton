@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   wheels:
@@ -52,6 +53,8 @@ jobs:
           merge-multiple: true
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   npm:
     runs-on: ubuntu-latest
@@ -68,10 +71,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
       - run: wasm-pack build --release --target web --out-dir pkg --scope soliton-physics
         working-directory: crates/soliton-wasm
-      # Trusted publishing (OIDC) needs npm 11.5 or newer; no token is involved.
+      # setup-node is used without registry-url: with it, a placeholder NODE_AUTH_TOKEN is injected and npm
+      # authenticates with that instead of the OIDC exchange. Trusted publishing needs npm 11.5 or newer.
       - run: npm install -g npm@latest
       - run: npm pkg set name=@soliton-physics/engine && npm pkg set 'keywords[]=physics'
         working-directory: crates/soliton-wasm/pkg
