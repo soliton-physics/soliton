@@ -311,6 +311,13 @@ impl Constraint for Rope {
     fn joined(&self) -> Option<(BodyId, BodyId)> {
         None
     }
+
+    /// The path measured afresh at the current positions, plus whatever slack the rope has now. Rope wound on or
+    /// paid out from a wheel since the start is thereby counted.
+    fn length_from_here(&self, bodies: &Bodies) -> Option<f64> {
+        let slack = self.length() - self.path_length(bodies);
+        Some(Rope::taut(self.nodes.clone(), bodies).length() + slack)
+    }
 }
 
 /// Where a rope coming from `previous` touches a pulley, where it leaves towards `next`, and the arc between.

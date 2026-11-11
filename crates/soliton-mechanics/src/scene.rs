@@ -492,6 +492,67 @@ impl SceneFile {
 
     /// Validates the description and builds the live world.
     pub fn build(&self) -> Result<Scene, SceneError> {
+        self.build_explicit().map(|(scene, _)| scene)
+    }
+
+    /// The scene as it stands part-way through a run: the same world with every body where `world` has it now,
+    /// and with everything that was measured at the start (a taut rope's length, a spring's rest length) written
+    /// out, so the lengths do not change with the positions. Times are counted from `time`: force windows and
+    /// time rules shift, and those already past are dropped. What is not carried over is the solver's memory of
+    /// which contacts were sliding, so the first step may differ in the last digits.
+    pub fn snapshot(&self, world: &World, time: f64) -> Result<SceneFile, SceneError> {
+        let (_, mut file) = self.build_explicit()?;
+        let bodies = world.bodies();
+        for (index, spec) in file.constraints.iter_mut().enumerate() {
+            if let ConstraintSpec::Rope { length, .. } = spec {
+                if let Some(now) = world.constraint(index).length_from_here(bodies) {
+                    *length = Some(now);
+                }
+            }
+        }
+        if bodies.len() != file.bodies.len() {
+            return err("the state does not belong to this scene");
+        }
+        for (spec, id) in file.bodies.iter_mut().zip(bodies.ids()) {
+            if !bodies.is_dynamic(id) {
+                continue;
+            }
+            let (position, angle) = (bodies.position(id), bodies.angle(id));
+            let origin = position - centroid_offset(&spec.shape).rotated(angle);
+            spec.position = [origin.x, origin.y];
+            spec.angle = angle;
+            spec.velocity = [bodies.velocity(id).x, bodies.velocity(id).y];
+            spec.angular_velocity = bodies.angular_velocity(id);
+        }
+        file.forces.retain_mut(|force| match force {
+            ForceSpec::Applied { from, until, .. } => {
+                *from = from.map(|t| t - time).filter(|&t| t > 0.0);
+                *until = until.map(|t| t - time);
+                until.is_none_or(|t| t > 0.0)
+            }
+            ForceSpec::Driving {
+                angular_frequency,
+                phase,
+                ..
+            } => {
+                *phase += *angular_frequency * time;
+                true
+            }
+            _ => true,
+        });
+        file.finish.retain_mut(|rule| match &mut rule.when {
+            TriggerSpec::Time(end) => {
+                *end -= time;
+                *end > 0.0
+            }
+            _ => true,
+        });
+        Ok(file)
+    }
+
+    /// Builds the world and, beside it, this description with every length measured at the start written out.
+    fn build_explicit(&self) -> Result<(Scene, SceneFile), SceneError> {
+        let mut explicit = self.clone();
         if self.schema != SCHEMA {
             return err(format!("unsupported scene schema {}", self.schema));
         }
@@ -527,7 +588,7 @@ impl SceneFile {
             })
         };
 
-        for spec in &self.forces {
+        for (index, spec) in self.forces.iter().enumerate() {
             match spec {
                 ForceSpec::Applied {
                     body,
@@ -558,6 +619,9 @@ impl SceneFile {
                     let rest = rest_length.unwrap_or_else(|| {
                         (b.world_point(world.bodies()) - a.world_point(world.bodies())).length()
                     });
+                    if let ForceSpec::Spring { rest_length, .. } = &mut explicit.forces[index] {
+                        *rest_length = Some(rest);
+                    }
                     world.add_force(Spring::new(a, b, *stiffness, rest));
                 }
                 ForceSpec::LinearDrag { body, coefficient } => {
@@ -577,7 +641,7 @@ impl SceneFile {
             }
         }
 
-        for spec in &self.constraints {
+        for (index, spec) in self.constraints.iter().enumerate() {
             match spec {
                 ConstraintSpec::Pin { a, b } => match (anchor(a)?, anchor(b)?) {
                     (Anchor::Body { id, local }, Anchor::Fixed(p))
@@ -596,6 +660,12 @@ impl SceneFile {
                     let length = length.unwrap_or_else(|| {
                         (b.world_point(world.bodies()) - a.world_point(world.bodies())).length()
                     });
+                    if let ConstraintSpec::Rod {
+                        length: written, ..
+                    } = &mut explicit.constraints[index]
+                    {
+                        *written = Some(length);
+                    }
                     world.add_constraint(Rod::new(a, b, length));
                 }
                 ConstraintSpec::Slot {
@@ -651,6 +721,12 @@ impl SceneFile {
                         }
                         None => Rope::taut(built, world.bodies()),
                     };
+                    if let ConstraintSpec::Rope {
+                        length: written, ..
+                    } = &mut explicit.constraints[index]
+                    {
+                        *written = Some(rope.length());
+                    }
                     world.add_constraint(rope);
                 }
             }
@@ -689,7 +765,7 @@ impl SceneFile {
                 half_width: None,
             }
         });
-        Ok(Scene {
+        let scene = Scene {
             world,
             dt: self.world.dt,
             labels,
@@ -701,7 +777,18 @@ impl SceneFile {
                 .collect(),
             view,
             finish,
-        })
+        };
+        Ok((scene, explicit))
+    }
+}
+
+/// How far a shape's centre of mass lies from the origin its description is written about.
+fn centroid_offset(shape: &ShapeSpec) -> Vec2 {
+    match shape {
+        ShapeSpec::Polygon(points) if points.len() >= 3 => {
+            Polygon::with_centroid(points.iter().map(|&p| v(p)).collect::<Vec<_>>()).1
+        }
+        _ => Vec2::ZERO,
     }
 }
 
@@ -719,8 +806,9 @@ fn build_body(spec: &BodySpec) -> Result<Body, SceneError> {
                     spec.id
                 ));
             }
-            let polygon = Polygon::new(points.iter().map(|&p| v(p)).collect::<Vec<_>>());
-            centroid = v(points[0]) - polygon.vertices()[0];
+            let (polygon, offset) =
+                Polygon::with_centroid(points.iter().map(|&p| v(p)).collect::<Vec<_>>());
+            centroid = offset;
             polygon.into()
         }
         ShapeSpec::Halfplane { normal, offset } => HalfPlane::new(v(*normal), *offset).into(),

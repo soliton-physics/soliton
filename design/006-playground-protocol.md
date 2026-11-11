@@ -37,6 +37,9 @@ exactly there, and once more if everything later comes to rest. `finished()` is 
 `forces(body)` carries `impulsive`, true for an impact impulse spread over one step, which the playground shows in
 N·s rather than as a force.
 
+For taking part in a run (design 008): `grab(body, x, y)`, `drag_to(x, y)`, `release()`, `grabbed()`,
+`body_at(x, y, slop)` and `scene_json_now()`.
+
 ## What the playground draws
 
 - bodies with shapes, velocity and acceleration vectors (toggle)

@@ -27,3 +27,4 @@ A document states the physics, the numerical method, the public API, and how the
 | [005](005-python-and-jupyter.md) | Python package and notebook workflow | Implemented (first slice) |
 | [006](006-playground-protocol.md) | What the WebAssembly layer exposes to the playground | Implemented |
 | [007](007-fields-baseline.md) | Spectral field solvers: what exists and what follows | Implemented (baseline) |
+| [008](008-interaction.md) | A hand on the physics: grabbing, picking, snapshots | Implemented |

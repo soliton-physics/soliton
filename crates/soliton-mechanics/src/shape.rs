@@ -20,6 +20,11 @@ pub struct Polygon {
 impl Polygon {
     /// Builds the polygon from vertices in any winding, recentred on their centroid.
     pub fn new(vertices: impl Into<Vec<Vec2>>) -> Self {
+        Self::with_centroid(vertices).0
+    }
+
+    /// The polygon together with where its centroid was in the coordinates the vertices were given in.
+    pub fn with_centroid(vertices: impl Into<Vec<Vec2>>) -> (Self, Vec2) {
         let mut vertices = vertices.into();
         assert!(
             vertices.len() >= 3,
@@ -30,7 +35,7 @@ impl Polygon {
         }
         let centroid = centroid(&vertices);
         vertices.iter_mut().for_each(|v| *v -= centroid);
-        Self { vertices }
+        (Self { vertices }, centroid)
     }
 
     pub fn rectangle(width: f64, height: f64) -> Self {

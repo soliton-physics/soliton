@@ -2,7 +2,7 @@ use crate::body::{Bodies, Body, BodyId};
 use crate::constraint::{Constraint, Sketch};
 use crate::contact::{detect, Contact};
 use crate::event::{Event, EventKind};
-use crate::force::{Force, ForceSample, Gravity, Instant, Loads, WorkClass};
+use crate::force::{Force, ForceSample, Grab, Gravity, Instant, Loads, WorkClass};
 use crate::solver::ConstraintSolver;
 use soliton_core::Vec2;
 
@@ -20,6 +20,9 @@ pub struct World {
     gravity: Vec2,
     has_velocity_forces: bool,
     has_windowed_forces: bool,
+    grab: Option<Grab>,
+    /// The hand changed since the loads were last evaluated, so they must not be reused for the next opening kick.
+    grab_changed: bool,
 }
 
 impl World {
@@ -37,6 +40,8 @@ impl World {
             gravity,
             has_velocity_forces: false,
             has_windowed_forces: false,
+            grab: None,
+            grab_changed: false,
         };
         world.add_force(Gravity { g: gravity });
         world
@@ -71,6 +76,65 @@ impl World {
         }
     }
 
+    /// Takes hold of a dynamic body at a world point and pulls that point towards `target` (design 008).
+    /// Returns false, holding nothing, for a static body.
+    pub fn grab(&mut self, body: BodyId, world_point: Vec2, target: Vec2) -> bool {
+        if !self.bodies.is_dynamic(body) {
+            return false;
+        }
+        let local = (world_point - self.bodies.position(body)).rotated(-self.bodies.angle(body));
+        self.grab = Some(Grab {
+            body,
+            local,
+            target,
+        });
+        self.grab_changed = true;
+        true
+    }
+
+    /// Moves the hand; does nothing when no body is held.
+    pub fn move_grab(&mut self, target: Vec2) {
+        if let Some(grab) = &mut self.grab {
+            grab.target = target;
+            self.grab_changed = true;
+        }
+    }
+
+    pub fn release(&mut self) {
+        if self.grab.take().is_some() {
+            self.grab_changed = true;
+        }
+    }
+
+    pub fn grabbed(&self) -> Option<Grab> {
+        self.grab
+    }
+
+    /// The dynamic body under a world point, the last added winning; failing that, the nearest one whose centre is
+    /// within `slop` metres, so a small particle is still easy to pick.
+    pub fn body_at(&self, point: Vec2, slop: f64) -> Option<BodyId> {
+        let b = &self.bodies;
+        let dynamic = || b.ids().filter(|&id| b.is_dynamic(id));
+        let inside = |id: BodyId| {
+            let local = (point - b.position(id)).rotated(-b.angle(id));
+            match b.shape(id) {
+                crate::shape::Shape::Circle(c) => local.length() <= c.radius,
+                crate::shape::Shape::Polygon(p) => {
+                    let v = p.vertices();
+                    (0..v.len()).all(|i| (v[(i + 1) % v.len()] - v[i]).cross(local - v[i]) >= 0.0)
+                }
+                crate::shape::Shape::HalfPlane(_) => false,
+            }
+        };
+        dynamic().filter(|&id| inside(id)).last().or_else(|| {
+            dynamic()
+                .map(|id| (id, (point - b.position(id)).length()))
+                .filter(|&(_, distance)| distance <= slop)
+                .min_by(|x, y| x.1.total_cmp(&y.1))
+                .map(|(id, _)| id)
+        })
+    }
+
     pub fn gravity(&self) -> Vec2 {
         self.gravity
     }
@@ -101,11 +165,13 @@ impl World {
     }
 
     pub(crate) fn has_velocity_forces(&self) -> bool {
-        self.has_velocity_forces
+        self.has_velocity_forces || self.grab.is_some()
     }
 
-    pub(crate) fn has_windowed_forces(&self) -> bool {
-        self.has_windowed_forces
+    /// Whether the loads left by the previous step cannot open the next one: a force switches at a given time, or
+    /// the hand moved in between.
+    pub(crate) fn needs_fresh_loads(&mut self) -> bool {
+        std::mem::take(&mut self.grab_changed) || self.has_windowed_forces
     }
 
     /// Recomputes every explicit force at the current state for the given half-step.
@@ -113,6 +179,9 @@ impl World {
         self.loads.clear();
         for force in &self.forces {
             force.apply(&self.bodies, instant, &mut self.loads);
+        }
+        if let Some(grab) = &self.grab {
+            grab.apply(&self.bodies, &mut self.loads);
         }
     }
 

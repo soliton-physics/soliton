@@ -165,6 +165,12 @@ pub trait Constraint {
     fn joined(&self) -> Option<(BodyId, BodyId)> {
         None
     }
+
+    /// For a constraint whose length depends on how far the run has got (a rope paying out from a wheel): the
+    /// length to write down so that a scene rebuilt at the current positions behaves the same.
+    fn length_from_here(&self, _bodies: &Bodies) -> Option<f64> {
+        None
+    }
 }
 
 fn joined_anchors(a: Anchor, b: Anchor) -> Option<(BodyId, BodyId)> {

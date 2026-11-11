@@ -4,6 +4,7 @@ use soliton_mechanics::scenario::{catalogue, find, Params, Scene};
 use soliton_mechanics::scene::SceneFile;
 use soliton_mechanics::{
     BodyId, BodyKind, Finished, ForceLabel, Recorder, Shape, Simulate, Simulation, Sketch, Trigger,
+    Vec2,
 };
 use wasm_bindgen::prelude::*;
 
@@ -72,6 +73,13 @@ struct EnergyInfo {
     dissipated: f64,
     external_work: f64,
     conserved: f64,
+}
+
+#[derive(Serialize)]
+struct GrabInfo {
+    body: usize,
+    point: [f64; 2],
+    target: [f64; 2],
 }
 
 #[derive(Serialize)]
@@ -198,6 +206,53 @@ impl MechanicsWorld {
             }),
             None => Ok(JsValue::NULL),
         }
+    }
+
+    /// Takes hold of a body at a world point (design 008). From now until `release`, a spring pulls that point
+    /// towards wherever `drag_to` last put the hand. Returns false for a body that cannot be moved.
+    pub fn grab(&mut self, body: usize, x: f64, y: f64) -> bool {
+        let point = Vec2::new(x, y);
+        self.sim
+            .world_mut()
+            .grab(BodyId::from_index(body), point, point)
+    }
+
+    pub fn drag_to(&mut self, x: f64, y: f64) {
+        self.sim.world_mut().move_grab(Vec2::new(x, y));
+    }
+
+    pub fn release(&mut self) {
+        self.sim.world_mut().release();
+    }
+
+    /// The held body and where the hand is, as `{ body, point: [x, y], target: [x, y] }`, or `null`.
+    pub fn grabbed(&self) -> Result<JsValue, JsError> {
+        let world = self.sim.world();
+        match world.grabbed() {
+            Some(grab) => to_js(&GrabInfo {
+                body: grab.body.index(),
+                point: v(world.bodies().world_point(grab.body, grab.local)),
+                target: v(grab.target),
+            }),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    /// The movable body under a world point, or the nearest one within `slop` metres.
+    pub fn body_at(&self, x: f64, y: f64, slop: f64) -> Option<usize> {
+        self.sim
+            .world()
+            .body_at(Vec2::new(x, y), slop)
+            .map(BodyId::index)
+    }
+
+    /// The scene as it stands now, as JSON: current positions and velocities, lengths written out, times counted
+    /// from this moment. Loading it carries on from here.
+    pub fn scene_json_now(&self) -> Result<String, JsError> {
+        self.file
+            .snapshot(self.sim.world(), self.sim.time())
+            .map(|file| file.to_json())
+            .map_err(|e| JsError::new(&e.to_string()))
     }
 
     /// The problem's time window, when the scene has one.

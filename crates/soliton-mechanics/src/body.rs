@@ -80,9 +80,7 @@ impl Body {
 
     /// A static polygon given by vertices in world coordinates, such as an incline drawn on the page.
     pub fn fixed_polygon(world_vertices: impl Into<Vec<Vec2>>) -> Self {
-        let vertices = world_vertices.into();
-        let polygon = Polygon::new(vertices.clone());
-        let centroid = vertices[0] - polygon.vertices()[0];
+        let (polygon, centroid) = Polygon::with_centroid(world_vertices);
         Self::fixed(polygon).at(centroid.x, centroid.y)
     }
 

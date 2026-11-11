@@ -527,3 +527,36 @@ impl Force for Driving {
         );
     }
 }
+
+/// A hand on a body (design 008): a critically damped spring from a point of the body to a target that follows the
+/// pointer. It is an ordinary external force, so it appears in the free-body diagram as `applied` and the energy
+/// ledger books what it does as external work.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Grab {
+    pub body: BodyId,
+    /// The held point in the body's frame.
+    pub local: Vec2,
+    pub target: Vec2,
+}
+
+/// Natural frequency of the hand's spring, rad/s. Stiff enough to follow the pointer closely, soft enough that
+/// `ω dt` stays small at the time steps the catalogue uses.
+const GRAB_FREQUENCY: f64 = 30.0;
+/// The spring stops stretching here, in metres, so a pointer flung across the screen cannot launch a body at any speed.
+const GRAB_REACH: f64 = 1.5;
+
+impl Grab {
+    pub(crate) fn apply(&self, bodies: &Bodies, loads: &mut Loads) {
+        let mass = bodies.mass(self.body);
+        let point = bodies.world_point(self.body, self.local);
+        let mut stretch = self.target - point;
+        let length = stretch.length();
+        if length > GRAB_REACH {
+            stretch = stretch * (GRAB_REACH / length);
+        }
+        let stiffness = mass * GRAB_FREQUENCY * GRAB_FREQUENCY;
+        let damping = 2.0 * mass * GRAB_FREQUENCY;
+        let force = stretch * stiffness - bodies.point_velocity(self.body, point) * damping;
+        loads.apply(bodies, self.body, ForceLabel::Applied, force, point);
+    }
+}

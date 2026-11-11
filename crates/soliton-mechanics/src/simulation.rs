@@ -71,6 +71,11 @@ impl Simulation {
         &self.world
     }
 
+    /// The world, for taking hold of a body between steps (design 008).
+    pub fn world_mut(&mut self) -> &mut World {
+        &mut self.world
+    }
+
     pub fn steps(&self) -> u64 {
         self.steps
     }
@@ -120,7 +125,7 @@ impl Simulate for Simulation {
     }
 
     fn step(&mut self) {
-        if self.world.has_windowed_forces() {
+        if self.world.needs_fresh_loads() {
             self.world.evaluate_loads(Instant::opening(self.time));
             self.previous_power = self.world.power();
         }
