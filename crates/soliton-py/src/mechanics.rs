@@ -94,8 +94,10 @@ impl Scene {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let labels = scene.labels.clone();
         let mut sim = Simulation::new(scene.world, scene.dt);
+        sim.finish_when(scene.finish);
         let mut recorder = Recorder::every(record_every.max(1));
         sim.run_until(until, &mut recorder);
+        let finished = sim.finished().map(|f| (f.time, f.describe(&labels)));
         let events = sim
             .events()
             .iter()
@@ -121,6 +123,7 @@ impl Scene {
             labels,
             events,
             time_end: sim.time(),
+            finished,
         })
     }
 }
@@ -132,6 +135,7 @@ pub struct Run {
     labels: Vec<String>,
     events: Vec<(f64, String, Vec<String>)>,
     time_end: f64,
+    finished: Option<(f64, String)>,
 }
 
 impl Run {
@@ -168,6 +172,18 @@ impl Run {
     #[getter]
     fn time_end(&self) -> f64 {
         self.time_end
+    }
+
+    /// `{"time", "reason"}` once the problem the scene poses has ended within the run, else `None`.
+    #[getter]
+    fn finished<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let Some((time, reason)) = &self.finished else {
+            return Ok(None);
+        };
+        let dict = PyDict::new(py);
+        dict.set_item("time", time)?;
+        dict.set_item("reason", reason)?;
+        Ok(Some(dict))
     }
 
     #[getter]

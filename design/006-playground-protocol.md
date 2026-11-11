@@ -31,6 +31,12 @@ As implemented, `MechanicsWorld` exposes: `mechanics_catalogue()`; `new(id, para
 `energy()`, `events()` (drained since the previous call); and the recorded `series_time()`, `series(body, quantity)`,
 `series_force(body, label)` and `series_energy(quantity)` for the graphs.
 
+`step(n)` returns `true` and stops early on the step the problem ends (design 004), so the playground can pause
+exactly there, and once more if everything later comes to rest. `finished()` is `{ time, reason }` or `null`;
+`horizon()` is the scene's time window when it has one, which fixes the graphs' time axis up front. Each entry of
+`forces(body)` carries `impulsive`, true for an impact impulse spread over one step, which the playground shows in
+N·s rather than as a force.
+
 ## What the playground draws
 
 - bodies with shapes, velocity and acceleration vectors (toggle)

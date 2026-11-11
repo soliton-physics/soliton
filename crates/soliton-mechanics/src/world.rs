@@ -1,7 +1,7 @@
 use crate::body::{Bodies, Body, BodyId};
 use crate::constraint::{Constraint, Sketch};
 use crate::contact::{detect, Contact};
-use crate::event::Event;
+use crate::event::{Event, EventKind};
 use crate::force::{Force, ForceSample, Gravity, Instant, Loads, WorkClass};
 use crate::solver::ConstraintSolver;
 use soliton_core::Vec2;
@@ -173,6 +173,9 @@ impl World {
         self.bodies.velocities = velocities;
         self.bodies.angular_velocities = spins;
         self.impact_loss = 0.0;
+        // Contacts and taut ropes present at the start are remembered, not announced; only a slip is news.
+        self.events
+            .retain(|e| matches!(e.kind, EventKind::FrictionSlip { .. }));
     }
 
     pub(crate) fn correct_positions(&mut self) {

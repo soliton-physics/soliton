@@ -3,6 +3,7 @@
 
 use crate::body::{Body, BodyId};
 use crate::constraint::{FixedAngle, PinJoint, Rod, Slot};
+use crate::finish::{Finish, Trigger};
 use crate::force::{Anchor, Applied, Driving, LinearDrag, QuadraticDrag, Spring, Torque};
 use crate::rope::{Rope, RopeNode, Wrap};
 use crate::scenario::{Scene, View};
@@ -55,6 +56,55 @@ pub struct SceneFile {
     pub answers: Vec<Answer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<View>,
+    /// Where the problem ends; the first rule to fire wins. Front ends pause there.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub finish: Vec<FinishSpec>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FinishSpec {
+    pub when: TriggerSpec,
+    /// Seconds to keep going after the trigger, so a collision can be watched to separation.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub hold: f64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerSpec {
+    Contact([String; 2]),
+    Separation([String; 2]),
+    /// Every moving body still for this many seconds.
+    Rest(f64),
+    Time(f64),
+}
+
+impl FinishSpec {
+    pub fn contact(a: &str, b: &str) -> Self {
+        Self::new(TriggerSpec::Contact([a.to_string(), b.to_string()]))
+    }
+
+    pub fn separation(a: &str, b: &str) -> Self {
+        Self::new(TriggerSpec::Separation([a.to_string(), b.to_string()]))
+    }
+
+    pub fn rest(seconds: f64) -> Self {
+        Self::new(TriggerSpec::Rest(seconds))
+    }
+
+    pub fn time(seconds: f64) -> Self {
+        Self::new(TriggerSpec::Time(seconds))
+    }
+
+    fn new(when: TriggerSpec) -> Self {
+        Self { when, hold: 0.0 }
+    }
+
+    pub fn hold(mut self, seconds: f64) -> Self {
+        self.hold = seconds;
+        self
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -354,6 +404,7 @@ impl SceneFile {
             focus: None,
             answers: Vec::new(),
             view: None,
+            finish: Vec::new(),
         }
     }
 
@@ -405,7 +456,23 @@ impl SceneFile {
         self.view = Some(View {
             center,
             half_height,
+            half_width: None,
         });
+        self
+    }
+
+    /// A view that must fit a box, not just a height.
+    pub fn frame(mut self, center: [f64; 2], half_width: f64, half_height: f64) -> Self {
+        self.view = Some(View {
+            center,
+            half_height,
+            half_width: Some(half_width),
+        });
+        self
+    }
+
+    pub fn finish(mut self, rule: FinishSpec) -> Self {
+        self.finish.push(rule);
         self
     }
 
@@ -601,11 +668,25 @@ impl SceneFile {
                 .find(|&id| world.bodies().is_dynamic(id))
                 .unwrap_or(BodyId::from_index(0)),
         };
+        let mut finish = Vec::with_capacity(self.finish.len());
+        for rule in &self.finish {
+            let trigger = match &rule.when {
+                TriggerSpec::Contact([a, b]) => Trigger::Contact(lookup(a)?, lookup(b)?),
+                TriggerSpec::Separation([a, b]) => Trigger::Separation(lookup(a)?, lookup(b)?),
+                TriggerSpec::Rest(seconds) => Trigger::Rest(*seconds),
+                TriggerSpec::Time(seconds) => Trigger::Time(*seconds),
+            };
+            if rule.hold < 0.0 {
+                return err("finish.hold must not be negative");
+            }
+            finish.push(Finish::new(trigger).hold(rule.hold));
+        }
         let view = self.view.unwrap_or_else(|| {
             let p = world.bodies().position(focus);
             View {
                 center: [p.x, p.y],
                 half_height: 3.0,
+                half_width: None,
             }
         });
         Ok(Scene {
@@ -619,6 +700,7 @@ impl SceneFile {
                 .map(|a| (a.name.clone(), a.value))
                 .collect(),
             view,
+            finish,
         })
     }
 }

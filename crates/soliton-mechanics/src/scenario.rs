@@ -3,8 +3,10 @@
 
 use crate::body::BodyId;
 use crate::exact;
+use crate::finish::Finish;
 use crate::scene::{
-    AnchorSpec, BodySpec, ConstraintSpec, ForceSpec, RopeNodeSpec, SceneFile, ShapeSpec, WrapSpec,
+    AnchorSpec, BodySpec, ConstraintSpec, FinishSpec, ForceSpec, RopeNodeSpec, SceneFile,
+    ShapeSpec, WrapSpec,
 };
 use crate::world::World;
 use serde::{Deserialize, Serialize};
@@ -96,6 +98,9 @@ impl Params {
 pub struct View {
     pub center: [f64; 2],
     pub half_height: f64,
+    /// When set, the frame is widened or zoomed out so this much also fits horizontally.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub half_width: Option<f64>,
 }
 
 /// A built scene: the live world plus everything the front ends need to present it.
@@ -107,6 +112,7 @@ pub struct Scene {
     pub focus: BodyId,
     pub exact: Vec<(String, f64)>,
     pub view: View,
+    pub finish: Vec<Finish>,
 }
 
 impl std::fmt::Debug for Scene {
@@ -151,9 +157,13 @@ pub fn find(id: &str) -> Option<&'static Scenario> {
     CATALOGUE.iter().find(|s| s.spec.id == id)
 }
 
+/// Every scenario ends at its suggested duration unless something more telling happens first.
 fn scene(spec: &ScenarioSpec) -> SceneFile {
-    SceneFile::new(spec.title, [0.0, -G], spec.dt)
+    SceneFile::new(spec.title, [0.0, -G], spec.dt).finish(FinishSpec::time(spec.duration))
 }
+
+/// A launched ball starts a hair above the ground so it is already free: no normal force, no contact to report.
+const LAUNCH_GAP: f64 = 2e-3;
 
 fn floor(friction: (f64, f64)) -> BodySpec {
     BodySpec::fixed(
@@ -204,6 +214,7 @@ fn free_fall(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .body(floor((1.0, 1.0)))
         .body(ball("ball", 1.0, 0.3).at(0.0, h + 0.3).restitution(0.0))
         .focus("ball")
+        .finish(FinishSpec::contact("ball", "ground"))
         .answer("Time to reach the ground (s)", (2.0 * h / G).sqrt())
         .answer("Speed on impact (m/s)", (2.0 * G * h).sqrt())
         .view([0.0, 0.5 * h], 0.6 * h + 1.0)
@@ -225,11 +236,12 @@ fn thrown_upward(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .body(floor((1.0, 1.0)))
         .body(
             ball("ball", 1.0, 0.3)
-                .at(0.0, 0.3)
+                .at(0.0, 0.3 + LAUNCH_GAP)
                 .velocity(0.0, u)
                 .restitution(0.0),
         )
         .focus("ball")
+        .finish(FinishSpec::contact("ball", "ground"))
         .answer("Maximum height (m)", apex)
         .answer("Time to the top (s)", u / G)
         .answer("Time of flight (s)", 2.0 * u / G)
@@ -251,20 +263,22 @@ fn projectile(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .body(floor((1.0, 1.0)))
         .body(
             ball("ball", 1.0, 0.25)
-                .at(0.0, 0.25)
+                .at(0.0, 0.25 + LAUNCH_GAP)
                 .velocity(u * angle.cos(), u * angle.sin())
                 .restitution(0.0),
         )
         .focus("ball")
+        .finish(FinishSpec::contact("ball", "ground"))
         .answer("Range (m)", range)
         .answer("Maximum height (m)", height)
         .answer(
             "Time of flight (s)",
             exact::projectile_flight_time(u, angle, G),
         )
-        .view(
+        .frame(
             [0.5 * range, 0.5 * height],
-            0.5 * range.max(height) * 1.3 + 1.0,
+            0.5 * range + 1.0,
+            0.5 * height + 1.0,
         )
 }
 
@@ -291,15 +305,25 @@ fn projectile_from_height(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         ))
         .body(
             ball("ball", 1.0, 0.25)
-                .at(0.0, h + 0.25)
+                .at(0.0, h + 0.25 + LAUNCH_GAP)
                 .velocity(ux, uy)
                 .restitution(0.0),
         )
         .focus("ball")
+        .finish(FinishSpec::contact("ball", "ground"))
         .answer("Horizontal range (m)", range)
         .answer("Time of flight (s)", flight)
         .answer("Speed on landing (m/s)", (u * u + 2.0 * G * h).sqrt())
-        .view([0.5 * range, 0.5 * h], 0.5 * range.max(h) * 1.3 + 1.0)
+        .frame(
+            [0.5 * range, 0.5 * (h + apex_above(uy, h))],
+            0.5 * range + 2.5,
+            0.5 * (h + apex_above(uy, h)) + 1.0,
+        )
+}
+
+/// Highest point of a flight launched from height `h` with vertical speed `uy`.
+fn apex_above(uy: f64, h: f64) -> f64 {
+    h + (uy.max(0.0)).powi(2) / (2.0 * G)
 }
 
 // ---------------------------------------------------------------- Laws of motion
@@ -346,6 +370,8 @@ fn incline_friction(spec: &ScenarioSpec, p: &Params) -> SceneFile {
                 .restitution(0.0),
         )
         .focus("block")
+        .finish(FinishSpec::contact("block", "ground"))
+        .finish(FinishSpec::rest(0.5))
         .answer("tan θ", theta.tan())
         .answer("Slides? (1 = yes)", if slides { 1.0 } else { 0.0 })
         .answer(
@@ -412,6 +438,7 @@ fn pushed_block(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             until: None,
         })
         .focus("block")
+        .finish(FinishSpec::rest(0.5))
         .answer("Push needed to move it (N)", threshold)
         .answer("Moves? (1 = yes)", if moves { 1.0 } else { 0.0 })
         .answer(
@@ -426,27 +453,37 @@ fn pushed_block(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .view([3.0, 1.0], 2.5)
 }
 
-static ATWOOD: [Param; 2] = [
+static ATWOOD: [Param; 3] = [
     param("m1", "Left mass", "kg", (0.1, 10.0), 0.1, 2.0),
     param("m2", "Right mass", "kg", (0.1, 10.0), 0.1, 3.0),
+    param(
+        "height",
+        "Pulley height above the masses",
+        "m",
+        (1.0, 8.0),
+        0.1,
+        5.0,
+    ),
 ];
 
 fn atwood(spec: &ScenarioSpec, p: &Params) -> SceneFile {
-    let (m1, m2) = (p.get(spec, "m1"), p.get(spec, "m2"));
+    let (m1, m2, height) = (p.get(spec, "m1"), p.get(spec, "m2"), p.get(spec, "height"));
     let radius = 0.4;
+    // The masses hang `height` below the pulley and have 2.5 m to fall before the floor.
+    let floor = -(height + 2.5);
     scene(spec)
         .body(
             BodySpec::fixed(
                 "floor",
                 ShapeSpec::Halfplane {
                     normal: [0.0, 1.0],
-                    offset: -7.5,
+                    offset: floor,
                 },
             )
             .friction(0.5, 0.4),
         )
-        .body(ball("m1", m1, 0.2).at(-radius, -5.0).restitution(0.0))
-        .body(ball("m2", m2, 0.2).at(radius, -5.0).restitution(0.0))
+        .body(ball("m1", m1, 0.2).at(-radius, -height).restitution(0.0))
+        .body(ball("m2", m2, 0.2).at(radius, -height).restitution(0.0))
         .constraint(ConstraintSpec::Rope {
             nodes: vec![
                 RopeNodeSpec::attach("m1"),
@@ -460,12 +497,15 @@ fn atwood(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             length: None,
         })
         .focus(if m2 >= m1 { "m2" } else { "m1" })
+        .finish(FinishSpec::contact("m1", "floor"))
+        .finish(FinishSpec::contact("m2", "floor"))
+        .finish(FinishSpec::rest(0.5))
         .answer(
             "Acceleration (m/s²)",
             exact::atwood_acceleration(m1, m2, G).abs(),
         )
         .answer("Tension (N)", exact::atwood_tension(m1, m2, G))
-        .view([0.0, -3.8], 4.3)
+        .view([0.0, 0.5 * (0.9 + floor - 0.5)], 0.5 * (0.9 - floor + 0.5))
 }
 
 static TABLE: [Param; 3] = [
@@ -527,6 +567,8 @@ fn table_and_hanging_mass(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             length: None,
         })
         .focus("block")
+        .finish(FinishSpec::contact("hanging mass", "floor"))
+        .finish(FinishSpec::rest(0.5))
         .answer("Moves? (1 = yes)", if moves { 1.0 } else { 0.0 })
         .answer("Acceleration (m/s²)", a)
         .answer(
@@ -579,6 +621,7 @@ fn collision_1d(spec: &ScenarioSpec, p: &Params) -> SceneFile {
                 .restitution(e),
         )
         .focus("mass 1")
+        .finish(FinishSpec::contact("mass 1", "mass 2").hold(1.0))
         .answer("Final speed 1 (m/s)", v1)
         .answer("Final speed 2 (m/s)", v2)
         .answer("Kinetic energy lost (J)", lost)
@@ -659,6 +702,8 @@ fn rolling(spec: &ScenarioSpec, p: &Params) -> SceneFile {
                 .restitution(0.0),
         )
         .focus("disc")
+        .finish(FinishSpec::contact("disc", "ground"))
+        .finish(FinishSpec::rest(0.5))
         .answer("Friction needed to roll without slipping", needed)
         .answer(
             "Rolls without slipping? (1 = yes)",
@@ -734,6 +779,9 @@ fn atwood_massive(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             length: None,
         })
         .focus(if m2 >= m1 { "m2" } else { "m1" })
+        .finish(FinishSpec::contact("m1", "floor"))
+        .finish(FinishSpec::contact("m2", "floor"))
+        .finish(FinishSpec::rest(0.5))
         .answer("Acceleration (m/s²)", a.abs())
         .answer("Tension on the left (N)", m1 * (G + a))
         .answer("Tension on the right (N)", m2 * (G - a))
@@ -797,6 +845,7 @@ fn flywheel(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             length: None,
         })
         .focus("mass")
+        .finish(FinishSpec::contact("mass", "floor"))
         .answer("Acceleration of the mass (m/s²)", a)
         .answer("Tension (N)", m * (G - a))
         .answer("Angular acceleration of the wheel (rad/s²)", a / radius)
@@ -837,6 +886,7 @@ fn seesaw(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             b: AnchorSpec::body_at("plank", [d2, 0.05 + r2]),
         })
         .focus("plank")
+        .finish(FinishSpec::rest(0.5))
         .answer("Left torque m1 d1 g (N·m)", m1 * d1 * G)
         .answer("Right torque m2 d2 g (N·m)", m2 * d2 * G)
         .answer(

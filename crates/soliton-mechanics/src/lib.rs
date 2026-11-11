@@ -10,6 +10,7 @@ mod contact;
 mod energy;
 mod event;
 pub mod exact;
+mod finish;
 mod force;
 mod integrator;
 mod record;
@@ -28,6 +29,7 @@ pub use constraint::{
 pub use contact::Contact;
 pub use energy::EnergyLedger;
 pub use event::{Event, EventKind};
+pub use finish::{Finish, Finished, Trigger};
 pub use force::{
     Anchor, Applied, Driving, Force, ForceLabel, ForceSample, LinearDrag, Loads, QuadraticDrag,
     Spring, Torque,

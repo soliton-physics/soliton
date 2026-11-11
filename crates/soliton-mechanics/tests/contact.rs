@@ -67,7 +67,8 @@ fn block_on_incline_rests_when_static_friction_suffices() {
     );
     assert_eq!(
         count(&sim, |k| matches!(k, EventKind::ContactBegin { .. })),
-        1
+        0,
+        "a contact present from the start is not announced"
     );
 }
 

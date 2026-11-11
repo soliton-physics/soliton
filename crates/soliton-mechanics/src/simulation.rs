@@ -1,5 +1,6 @@
 use crate::energy::EnergyLedger;
 use crate::event::Event;
+use crate::finish::{Finish, FinishWatch, Finished};
 use crate::force::Instant;
 use crate::integrator::{Integrator, Verlet};
 use crate::record::Recorder;
@@ -17,6 +18,8 @@ pub struct Simulation {
     external_work: f64,
     previous_power: Power,
     events: Vec<Event>,
+    finish: FinishWatch,
+    finished: Option<Finished>,
 }
 
 impl Simulation {
@@ -43,7 +46,25 @@ impl Simulation {
             external_work: 0.0,
             previous_power,
             events: Vec::new(),
+            finish: FinishWatch::default(),
+            finished: None,
         }
+    }
+
+    /// Installs the rules that mark the end of the problem; the first to fire wins.
+    pub fn finish_when(&mut self, rules: Vec<Finish>) {
+        self.finish = FinishWatch::new(rules);
+        self.finished = None;
+    }
+
+    pub fn finish_rules(&self) -> &[Finish] {
+        self.finish.rules()
+    }
+
+    /// Set once the problem has ended; stepping past it is allowed. If everything later comes to rest, this
+    /// changes once more to say so.
+    pub fn finished(&self) -> Option<Finished> {
+        self.finished
     }
 
     pub fn world(&self) -> &World {
@@ -106,7 +127,14 @@ impl Simulate for Simulation {
         self.integrator.step(&mut self.world, self.time, self.dt);
         self.steps += 1;
         self.time = self.steps as f64 * self.dt;
+        let first_new = self.events.len();
         self.events.append(&mut self.world.events);
+        if let Some(finished) =
+            self.finish
+                .observe(&self.world, &self.events[first_new..], self.time)
+        {
+            self.finished = Some(finished);
+        }
         self.dissipated += std::mem::take(&mut self.world.impact_loss);
 
         let power = self.world.power();

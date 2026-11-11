@@ -32,6 +32,37 @@ from it, so the JSON a teacher exports from the playground is exactly what ran. 
 (`serde_json` with `float_roundtrip`), which `tests/scene.rs` checks for every scenario. Forces and constraints are
 externally tagged (`{"applied": {...}}`, `{"rope": {...}}`); ropes and rods without a length start taut.
 
+## Where the problem ends
+
+A scene may say where the question it poses is over. `finish` is a list of rules; the first to fire wins.
+
+```json
+"finish": [ { "when": { "contact": ["ball", "ground"] } }, { "when": { "time": 4 } } ]
+```
+
+| Rule | Fires when |
+| --- | --- |
+| `{"contact": ["a", "b"]}` | the two bodies first touch (at the interpolated impact time) |
+| `{"separation": ["a", "b"]}` | two touching bodies come apart |
+| `{"rest": s}` | every moving body has been slower than 1 mm/s and 1 mrad/s for `s` seconds |
+| `{"time": t}` | the clock reaches `t` |
+
+A rule may add `"hold": s` to keep going for `s` seconds after it fires, so a collision can be watched to separation.
+The end is reported two steps after the trigger, so the reactions on screen are steady ones and not the impulse of the
+impact that ended the problem. `Simulation::finished()` then gives the time and the reason in words
+("ball touched ground", "the problem's time window ended"). For a rest rule the time is the moment the bodies became
+still; a scene that never moves reports "nothing moves, it is in equilibrium from the start" at `t = 0`.
+
+Finishing never stops the engine. Stepping past the end is allowed, and once a problem has ended the simulation keeps
+watching for everything to come to rest (still for half a second) and reports that once, so a front end can say
+"everything has been at rest since t". A scene without rules never finishes. Every catalogue scenario ends at its
+suggested duration unless something more telling happens first.
+
+Contacts and taut ropes that exist at the start are remembered, not announced: the event log holds what changes
+during the run. A launched ball starts 2 mm above the ground so that it begins free.
+
+`view` may carry `half_width` beside `half_height` when a whole flight has to fit horizontally.
+
 ## Parameters
 
 A catalogue scenario is a Rust function from parameters to a scene, plus a parameter schema:

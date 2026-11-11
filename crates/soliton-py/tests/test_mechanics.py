@@ -12,7 +12,7 @@ def test_catalogue_lists_scenarios_in_chapter_order():
     assert ids[0] == "free-fall"
     assert "atwood" in ids and "simple-pendulum" in ids
     spec = next(s for s in mechanics.catalogue() if s["id"] == "atwood")
-    assert {p["name"] for p in spec["params"]} == {"m1", "m2"}
+    assert {p["name"] for p in spec["params"]} == {"m1", "m2", "height"}
 
 
 def test_atwood_run_matches_textbook():
@@ -24,7 +24,8 @@ def test_atwood_run_matches_textbook():
     assert abs(abs(v[-1, 1]) - answers["Acceleration (m/s²)"] * run.time_end) < 1e-8
     tension = run.force("m2", "tension")
     assert abs(np.linalg.norm(tension[-1]) - answers["Tension (N)"]) < 1e-8
-    assert run.events[0]["kind"] == "rope_taut"
+    # A rope that is taut from the start is not news; only what changes during the run is an event.
+    assert run.events == []
 
 
 def test_json_round_trip_and_editing(tmp_path):
@@ -52,3 +53,10 @@ def test_errors_are_informative():
     run = mechanics.scenario("free-fall").run(until=0.1)
     with pytest.raises(ValueError, match="no body named"):
         run.body("rocket")
+
+
+def test_run_reports_where_the_problem_ends():
+    run = mechanics.scenario("free-fall", height=20).run(until=3.0)
+    assert run.finished["reason"] in ("ball touched ground", "everything came to rest")
+    assert abs(run.finished["time"] - math.sqrt(2 * 20 / 9.8)) < 5e-3
+    assert mechanics.scenario("simple-pendulum").run(until=1.0).finished is None

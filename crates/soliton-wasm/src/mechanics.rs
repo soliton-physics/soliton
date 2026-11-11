@@ -3,7 +3,7 @@ use serde::Serialize;
 use soliton_mechanics::scenario::{catalogue, find, Params, Scene};
 use soliton_mechanics::scene::SceneFile;
 use soliton_mechanics::{
-    BodyId, BodyKind, ForceLabel, Recorder, Shape, Simulate, Simulation, Sketch,
+    BodyId, BodyKind, Finished, ForceLabel, Recorder, Shape, Simulate, Simulation, Sketch, Trigger,
 };
 use wasm_bindgen::prelude::*;
 
@@ -41,6 +41,8 @@ struct BodyInfo {
 #[derive(Serialize)]
 struct ForceInfo {
     label: &'static str,
+    /// An impact impulse spread over one step rather than a steady force.
+    impulsive: bool,
     force: [f64; 2],
     point: [f64; 2],
     torque: f64,
@@ -73,6 +75,12 @@ struct EnergyInfo {
 }
 
 #[derive(Serialize)]
+struct FinishInfo {
+    time: f64,
+    reason: String,
+}
+
+#[derive(Serialize)]
 struct ExactInfo {
     name: String,
     value: f64,
@@ -93,6 +101,7 @@ pub struct MechanicsWorld {
     file: SceneFile,
     view: soliton_mechanics::scenario::View,
     drained: usize,
+    announced: Option<Finished>,
 }
 
 #[wasm_bindgen]
@@ -128,8 +137,10 @@ impl MechanicsWorld {
             focus,
             exact,
             view,
+            finish,
         } = file.build().map_err(|e| JsError::new(&e.to_string()))?;
-        let sim = Simulation::new(world, dt);
+        let mut sim = Simulation::new(world, dt);
+        sim.finish_when(finish);
         let mut recorder = Recorder::every(record_every.max(1) as u64);
         recorder.observe(&sim);
         Ok(Self {
@@ -141,6 +152,7 @@ impl MechanicsWorld {
             view,
             file,
             drained: 0,
+            announced: None,
         })
     }
 
@@ -153,7 +165,10 @@ impl MechanicsWorld {
         self.file.title.clone()
     }
 
-    pub fn step(&mut self, steps: usize) {
+    /// Steps, stopping early the moment the problem ends so a front end can pause exactly there.
+    /// Returns true when this call reached the end; later calls carry on past it, and stop once more if
+    /// everything then comes to rest.
+    pub fn step(&mut self, steps: usize) -> bool {
         for _ in 0..steps {
             self.sim.step();
             if self
@@ -163,7 +178,37 @@ impl MechanicsWorld {
             {
                 self.recorder.observe(&self.sim);
             }
+            if self.sim.finished() != self.announced {
+                self.announced = self.sim.finished();
+                if self.recorder.time.last() != Some(&self.sim.time()) {
+                    self.recorder.observe(&self.sim);
+                }
+                return true;
+            }
         }
+        false
+    }
+
+    /// `{ time, reason }` once the problem has ended, otherwise `null`.
+    pub fn finished(&self) -> Result<JsValue, JsError> {
+        match self.sim.finished() {
+            Some(f) => to_js(&FinishInfo {
+                time: f.time,
+                reason: f.describe(&self.labels),
+            }),
+            None => Ok(JsValue::NULL),
+        }
+    }
+
+    /// The problem's time window, when the scene has one.
+    pub fn horizon(&self) -> Option<f64> {
+        self.sim
+            .finish_rules()
+            .iter()
+            .find_map(|rule| match rule.trigger {
+                Trigger::Time(end) => Some(end + rule.hold),
+                _ => None,
+            })
     }
 
     pub fn time(&self) -> f64 {
@@ -239,6 +284,7 @@ impl MechanicsWorld {
             .forces_on(BodyId::from_index(body))
             .map(|s| ForceInfo {
                 label: s.label.as_str(),
+                impulsive: s.impulsive,
                 force: v(s.force),
                 point: v(s.point),
                 torque: s.torque,
