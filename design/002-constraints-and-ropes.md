@@ -1,6 +1,6 @@
 # 002: Bilateral constraints, pin joints, ropes and pulleys
 
-Status: Draft
+Status: Implemented
 
 ## Scope
 
