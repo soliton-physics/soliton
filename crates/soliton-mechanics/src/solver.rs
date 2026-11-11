@@ -10,6 +10,10 @@ const POSITION_SWEEPS: usize = 50;
 const POSITION_TOLERANCE: f64 = 1e-13;
 const CONTACT_SWEEPS: usize = 10;
 const FRICTION_WARM_START: f64 = 0.5;
+/// Static friction is tried first; each pass after it lets the contacts that could not hold slide.
+const FRICTION_PASSES: usize = 4;
+/// Tangential speed left after the static solve above which a contact is sliding.
+const SLIP_SPEED: f64 = 1e-9;
 
 /// What is remembered about a contact between steps: the whole-step impulses it delivered, whether it was an
 /// impact, and its friction state.
@@ -279,46 +283,64 @@ impl ConstraintSolver {
             .iter()
             .map(|row| Self::effective_mass(&self.current, bodies, row))
             .collect();
-        for _ in 0..VELOCITY_SWEEPS {
-            let mut largest_change: f64 = 0.0;
-            let mut largest_impulse: f64 = 0.0;
-            for (r, row) in rows.iter().enumerate() {
-                if !row.active || masses[r] == 0.0 {
+        // Coulomb friction is decided the way a student is taught, per pair of bodies rather than per point. First
+        // every contact that was not already sliding is offered static friction, each point bounded by `μs N` so
+        // that one point reaching its limit hands the remainder to the others. Only if the surfaces still move over
+        // each other once that has converged does the contact slide, and the solve is repeated with `μk N`.
+        for _ in 0..FRICTION_PASSES {
+            for _ in 0..VELOCITY_SWEEPS {
+                let mut largest_change: f64 = 0.0;
+                let mut largest_impulse: f64 = 0.0;
+                for (r, row) in rows.iter().enumerate() {
+                    if !row.active || masses[r] == 0.0 {
+                        continue;
+                    }
+                    let unconstrained = self.impulses[r]
+                        + (row.bias - Self::relative_velocity(&self.current, bodies, row))
+                            / masses[r];
+                    let clamped = match row.kind {
+                        RowKind::Bilateral => unconstrained,
+                        RowKind::Rope | RowKind::Normal => unconstrained.max(0.0),
+                        RowKind::Friction {
+                            normal,
+                            static_friction,
+                            kinetic_friction,
+                        } => {
+                            let limit = self.impulses[normal];
+                            let contact = row.source;
+                            if sliding[contact] && unconstrained.abs() <= kinetic_friction * limit {
+                                sliding[contact] = false;
+                            }
+                            let bound = if sliding[contact] {
+                                kinetic_friction
+                            } else {
+                                static_friction
+                            } * limit;
+                            unconstrained.clamp(-bound, bound)
+                        }
+                    };
+                    let change = clamped - self.impulses[r];
+                    self.impulses[r] = clamped;
+                    Self::apply_impulse(&self.current, bodies, row, change);
+                    largest_change = largest_change.max(change.abs());
+                    largest_impulse = largest_impulse.max(clamped.abs());
+                }
+                if largest_change <= VELOCITY_TOLERANCE * (1.0 + largest_impulse) {
+                    break;
+                }
+            }
+            let mut slipped = false;
+            for (k, state) in sliding.iter_mut().enumerate() {
+                let row = &rows[constraint_rows + 2 * k + 1];
+                if *state || !row.active || self.impulses[constraint_rows + 2 * k] <= 0.0 {
                     continue;
                 }
-                let unconstrained = self.impulses[r]
-                    + (row.bias - Self::relative_velocity(&self.current, bodies, row)) / masses[r];
-                let clamped = match row.kind {
-                    RowKind::Bilateral => unconstrained,
-                    RowKind::Rope | RowKind::Normal => unconstrained.max(0.0),
-                    RowKind::Friction {
-                        normal,
-                        static_friction,
-                        kinetic_friction,
-                    } => {
-                        let limit = self.impulses[normal];
-                        let contact = row.source;
-                        let threshold = if sliding[contact] {
-                            kinetic_friction
-                        } else {
-                            static_friction
-                        } * limit;
-                        if unconstrained.abs() <= threshold {
-                            sliding[contact] = false;
-                            unconstrained
-                        } else {
-                            sliding[contact] = true;
-                            unconstrained.clamp(-kinetic_friction * limit, kinetic_friction * limit)
-                        }
-                    }
-                };
-                let change = clamped - self.impulses[r];
-                self.impulses[r] = clamped;
-                Self::apply_impulse(&self.current, bodies, row, change);
-                largest_change = largest_change.max(change.abs());
-                largest_impulse = largest_impulse.max(clamped.abs());
+                if Self::relative_velocity(&self.current, bodies, row).abs() > SLIP_SPEED {
+                    *state = true;
+                    slipped = true;
+                }
             }
-            if largest_change <= VELOCITY_TOLERANCE * (1.0 + largest_impulse) {
+            if !slipped {
                 break;
             }
         }
@@ -386,7 +408,17 @@ impl ConstraintSolver {
             if !touching.contains(&(c.a, c.b)) {
                 touching.push((c.a, c.b));
             }
-            if sliding[k] && self.impulses[normal_row] > 0.0 && !sliding_now.contains(&(c.a, c.b)) {
+            // A frictionless surface has no friction to slip or stick, so it reports neither.
+            let rough = matches!(
+                rows[normal_row + 1].kind,
+                RowKind::Friction { static_friction, kinetic_friction, .. }
+                    if static_friction > 0.0 || kinetic_friction > 0.0
+            );
+            if rough
+                && sliding[k]
+                && self.impulses[normal_row] > 0.0
+                && !sliding_now.contains(&(c.a, c.b))
+            {
                 sliding_now.push((c.a, c.b));
             }
         }

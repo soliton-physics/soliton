@@ -412,3 +412,53 @@ fn box_rests_flat_on_the_floor() {
         ) < 1e-10
     );
 }
+
+/// A push below `μs N` applied at the block's side tilts the load onto the leading corner. That corner reaches its
+/// own static limit first and the other takes the remainder: the block as a whole still holds.
+#[test]
+fn static_friction_is_shared_between_the_corners_of_a_pushed_box() {
+    let (mass, push, mu_s, mu_k) = (2.0, 8.0, 0.5, 0.3);
+    assert!(push < mu_s * mass * G && push > mu_k * mass * G);
+    let mut world = World::new(Vec2::new(0.0, -G));
+    world.add(Body::fixed(HalfPlane::new(Vec2::Y, 0.0)).friction(mu_s, mu_k));
+    let block = world.add(Body::rigid(mass, Polygon::rectangle(0.8, 0.5)).at(0.0, 0.25));
+    world.add_force(Applied::new(block, Vec2::new(push, 0.0)).at_local(Vec2::new(-0.4, 0.0)));
+    let mut sim = Simulation::new(world, 1e-3);
+    let mut recorder = Recorder::every(1);
+    sim.run_until(1.0, &mut recorder);
+
+    let bodies = sim.world().bodies();
+    assert!(bodies.velocity(block).length() < 1e-10);
+    assert!(bodies.position(block).x.abs() < 1e-10);
+    for sample in [0, recorder.samples() - 1] {
+        let friction = recorder.force(block, ForceLabel::Friction)[sample];
+        let normal = recorder.force(block, ForceLabel::Normal)[sample];
+        assert!(relative(-friction.x, push) < 1e-8, "friction {friction:?}");
+        assert!(relative(normal.y, mass * G) < 1e-8, "normal {normal:?}");
+    }
+    assert_eq!(
+        count(&sim, |k| matches!(k, EventKind::FrictionSlip { .. })),
+        0
+    );
+}
+
+#[test]
+fn a_frictionless_surface_reports_no_friction_events() {
+    let mut world = World::new(Vec2::new(0.0, -G));
+    world.add(Body::fixed(HalfPlane::new(Vec2::Y, 0.0)));
+    world.add(
+        Body::particle(1.0)
+            .shape(Circle::new(0.2))
+            .at(0.0, 0.2)
+            .velocity(2.0, 0.0),
+    );
+    let mut sim = Simulation::new(world, 1e-3);
+    sim.advance(200);
+    assert_eq!(
+        count(&sim, |k| matches!(
+            k,
+            EventKind::FrictionSlip { .. } | EventKind::FrictionStick { .. }
+        )),
+        0
+    );
+}

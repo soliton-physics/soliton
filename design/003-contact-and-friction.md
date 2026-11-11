@@ -1,6 +1,6 @@
 # 003: Contact, Coulomb friction, restitution, time stepping
 
-Status: Draft
+Status: Implemented
 
 ## Scope
 
@@ -69,11 +69,21 @@ the textbook intends.
 
 ## Friction
 
-Per contact row, inside the Gauss–Seidel sweep, after the normal impulse is known:
+Friction is decided per pair of surfaces, in two stages inside the velocity solve:
 
-1. Compute the tangential impulse `λ_stick` that would bring relative tangential velocity to zero.
-2. If `|λ_stick| ≤ μ_s λ_n`: static friction holds. Apply `λ_stick`. The body does not slide.
-3. Otherwise: kinetic friction. Apply `λ_t = -μ_k λ_n · sign(v_t)`.
+1. Every contact that was not sliding on the previous step is offered static friction: the tangential impulse that
+   would stop the relative motion, with each contact point bounded by its own `μ_s λ_n`.
+2. Once that has converged, a contact whose surfaces still move over each other could not be held. It slides: the
+   solve is repeated with `λ_t = -μ_k λ_n · sign(v_t)` for it.
+3. A sliding contact sticks again when the impulse that would stop it fits inside `μ_k λ_n`.
+
+Bounding each point by the static limit first, rather than switching a point to kinetic friction the moment it
+saturates, matters for a body with several contact points. A box pushed at its side below `μ_s N` carries more of its
+weight on the leading corner; that corner reaches `μ_s λ_n` first, the other corner takes the remainder, and the box
+holds, as the textbook says it must. Deciding per point made that box slide under a push of 8 N against a limit of
+9.8 N.
+
+A frictionless surface (`μ_s = μ_k = 0`) has no friction to slip or stick, so it reports neither event.
 
 Static friction shared between several contact points of one body is statically indeterminate, and the solver's
 warm start would otherwise carry an arbitrary equal-and-opposite pair forever (a resting box showing ±0.6 N of
@@ -116,6 +126,7 @@ integrator's accuracy. This turns "where did the energy go" into a number on scr
 | rolling disc, `μ_s` too small | `a = g (sin θ − μ_k cos θ)`, rim lags, one slip event | 1e-8 |
 | bouncing ball, `e = 0.8` | successive apex ratios `e²`, first landing time | 5e-5 (measured 2.1e-5), 1e-6 s |
 | box on the floor | rests flat, two-point manifold, `N = m g` | 1e-10 |
+| box pushed at its side below `μ_s N` | holds, friction = push, no slip event | 1e-8 |
 | ladder on a smooth wall | stays for `μ ≥ 1.3 μ_min`, slides for `0.7 μ_min` | event |
 
 ## Impact timing
