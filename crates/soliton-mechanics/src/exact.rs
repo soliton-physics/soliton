@@ -128,3 +128,54 @@ pub fn ladder_min_friction(theta: f64) -> f64 {
 pub fn atwood_massive_acceleration(m1: f64, m2: f64, pulley_mass: f64, g: f64) -> f64 {
     (m2 - m1) * g / (m1 + m2 + 0.5 * pulley_mass)
 }
+
+/// Speed of a circular orbit of radius `r` about a mass with gravitational parameter `mu = G M`.
+pub fn circular_orbit_speed(mu: f64, r: f64) -> f64 {
+    (mu / r).sqrt()
+}
+
+/// Kepler's third law: the period of an orbit with semi-major axis `a`.
+pub fn orbit_period(mu: f64, a: f64) -> f64 {
+    std::f64::consts::TAU * (a * a * a / mu).sqrt()
+}
+
+/// Speed needed at distance `r` to leave for good.
+pub fn escape_speed(mu: f64, r: f64) -> f64 {
+    (2.0 * mu / r).sqrt()
+}
+
+/// The ellipse a body follows when it passes its nearest point, at distance `r_p`, with speed `v_p` at right
+/// angles to the radius: semi-major axis and eccentricity. Bound only while `v_p` is below the escape speed.
+pub fn orbit_from_perigee(mu: f64, r_p: f64, v_p: f64) -> (f64, f64) {
+    let energy = 0.5 * v_p * v_p - mu / r_p;
+    (-mu / (2.0 * energy), r_p * v_p * v_p / mu - 1.0)
+}
+
+/// How high above its launch radius `r` a body thrown straight up at `speed` rises, when it does not escape.
+pub fn vertical_launch_height(mu: f64, r: f64, speed: f64) -> f64 {
+    let ratio = 2.0 * mu / (r * speed * speed);
+    r / (ratio - 1.0)
+}
+
+/// Time for a body thrown straight up from radius `r` to reach its highest point at radius `top`.
+pub fn vertical_launch_rise_time(mu: f64, r: f64, top: f64) -> f64 {
+    // A radial orbit is an ellipse of eccentricity one with semi-major axis `top / 2`: r = a (1 − cos E).
+    let a = 0.5 * top;
+    let anomaly = (1.0 - r / a).acos();
+    (a * a * a / mu).sqrt() * (std::f64::consts::PI - anomaly + anomaly.sin())
+}
+
+/// Steady-state amplitude and phase lag of `m x'' + b x' + k x = F₀ cos(ω t)`.
+pub fn driven_response(
+    mass: f64,
+    stiffness: f64,
+    damping: f64,
+    force: f64,
+    omega: f64,
+) -> (f64, f64) {
+    let (reactive, resistive) = (stiffness - mass * omega * omega, damping * omega);
+    (
+        force / (reactive * reactive + resistive * resistive).sqrt(),
+        resistive.atan2(reactive),
+    )
+}

@@ -6,7 +6,7 @@ use crate::exact;
 use crate::finish::Finish;
 use crate::scene::{
     AnchorSpec, BodySpec, ConstraintSpec, FinishSpec, ForceSpec, RopeNodeSpec, SceneFile,
-    ShapeSpec, WrapSpec,
+    ShapeSpec, SourceSpec, WrapSpec,
 };
 use crate::world::World;
 use serde::{Deserialize, Serialize};
@@ -898,6 +898,154 @@ fn seesaw(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .view([0.0, 1.0], 2.5)
 }
 
+// ---------------------------------------------------------------- Gravitation
+
+const BIG_G: f64 = 6.674e-11;
+const EARTH_MASS: f64 = 5.972e24;
+const EARTH_RADIUS: f64 = 6.371e6;
+const EARTH_MU: f64 = BIG_G * EARTH_MASS;
+const KM: f64 = 1000.0;
+
+/// The largest of 1, 2, 5 times a power of ten that does not exceed `value`: a time step people can read.
+fn round_step(value: f64) -> f64 {
+    let magnitude = 10f64.powf(value.log10().floor());
+    [5.0, 2.0, 1.0]
+        .into_iter()
+        .map(|m| m * magnitude)
+        .find(|&step| step <= value)
+        .unwrap_or(magnitude)
+}
+
+/// A scene in space around the Earth: no uniform gravity, Newton's law from the Earth's mass at the origin,
+/// and the planet drawn as a fixed disc. `duration` is how long the problem lasts; the scene is stepped about
+/// six thousand times over it and played back in about fifteen seconds.
+fn around_earth(spec: &ScenarioSpec, duration: f64, step: (f64, f64)) -> SceneFile {
+    let dt = round_step(duration / 6000.0).clamp(step.0, step.1);
+    SceneFile::new(spec.title, [0.0, 0.0], dt)
+        .playback(duration / 15.0)
+        .finish(FinishSpec::time(duration))
+        .body(BodySpec::fixed("Earth", ShapeSpec::Circle(EARTH_RADIUS)).restitution(0.0))
+        .force(ForceSpec::Gravitation {
+            constant: BIG_G,
+            fixed: vec![SourceSpec {
+                at: [0.0, 0.0],
+                mass: EARTH_MASS,
+            }],
+        })
+}
+
+fn satellite(id: &str) -> BodySpec {
+    BodySpec::particle(id, 1000.0).restitution(0.0)
+}
+
+static CIRCULAR_ORBIT: [Param; 1] = [param(
+    "altitude",
+    "Altitude",
+    "km",
+    (200.0, 36000.0),
+    100.0,
+    400.0,
+)];
+
+fn circular_orbit(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let r = EARTH_RADIUS + p.get(spec, "altitude") * KM;
+    let speed = exact::circular_orbit_speed(EARTH_MU, r);
+    let period = exact::orbit_period(EARTH_MU, r);
+    // A little over two turns, so the period can be read off between two passes of the same point.
+    around_earth(spec, 2.05 * period, (0.5, 60.0))
+        .body(satellite("satellite").at(r, 0.0).velocity(0.0, speed))
+        .focus("satellite")
+        .answer("Orbital speed (km/s)", speed / KM)
+        .answer("Period (min)", period / 60.0)
+        .answer("Acceleration (m/s²)", EARTH_MU / (r * r))
+        .view([0.0, 0.0], 1.2 * r)
+}
+
+static ELLIPTICAL_ORBIT: [Param; 2] = [
+    param(
+        "perigee",
+        "Altitude at the nearest point",
+        "km",
+        (200.0, 2000.0),
+        50.0,
+        400.0,
+    ),
+    param(
+        "boost",
+        "Speed there ÷ circular speed",
+        "",
+        (1.0, 1.35),
+        0.01,
+        1.2,
+    ),
+];
+
+fn elliptical_orbit(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let r_p = EARTH_RADIUS + p.get(spec, "perigee") * KM;
+    let v_p = p.get(spec, "boost") * exact::circular_orbit_speed(EARTH_MU, r_p);
+    let (a, e) = exact::orbit_from_perigee(EARTH_MU, r_p, v_p);
+    let r_a = a * (1.0 + e);
+    let period = exact::orbit_period(EARTH_MU, a);
+    let minor = a * (1.0 - e * e).sqrt();
+    around_earth(spec, 2.05 * period, (0.5, 60.0))
+        .body(satellite("satellite").at(r_p, 0.0).velocity(0.0, v_p))
+        .focus("satellite")
+        .answer("Farthest altitude (km)", (r_a - EARTH_RADIUS) / KM)
+        .answer("Period (min)", period / 60.0)
+        .answer("Speed at the nearest point (km/s)", v_p / KM)
+        // Kepler's second law: r v is the same at both ends of the ellipse.
+        .answer("Speed at the farthest point (km/s)", v_p * r_p / r_a / KM)
+        .answer("Eccentricity", e)
+        .frame(
+            [0.5 * (r_p - r_a), 0.0],
+            1.15 * a,
+            1.15 * minor.max(EARTH_RADIUS),
+        )
+}
+
+static ESCAPE: [Param; 1] = [param(
+    "speed",
+    "Launch speed",
+    "km/s",
+    (1.0, 15.0),
+    0.1,
+    8.0,
+)];
+
+/// The longest a launch is followed, seconds. A body thrown just below the escape speed takes days to return.
+const LONGEST_FLIGHT: f64 = 6.0 * 3600.0;
+
+fn escape_velocity(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let speed = p.get(spec, "speed") * KM;
+    let start = EARTH_RADIUS + 10.0;
+    let escape = exact::escape_speed(EARTH_MU, start);
+    let escapes = speed >= escape;
+    let (height, duration) = if escapes {
+        (f64::INFINITY, 3.0 * 3600.0)
+    } else {
+        let height = exact::vertical_launch_height(EARTH_MU, start, speed);
+        let rise = exact::vertical_launch_rise_time(EARTH_MU, start, start + height);
+        (height, (2.2 * rise).min(LONGEST_FLIGHT))
+    };
+    let shown = height.min(12.0 * EARTH_RADIUS);
+    let (top, bottom) = (EARTH_RADIUS + 1.1 * shown, -1.1 * EARTH_RADIUS);
+    let scene = around_earth(spec, duration, (0.5, 2.0))
+        .body(satellite("rocket").at(0.0, start).velocity(0.0, speed))
+        .focus("rocket")
+        .finish(FinishSpec::contact("rocket", "Earth"))
+        .answer("Escape speed (km/s)", escape / KM)
+        .answer("Escapes? (1 = yes)", if escapes { 1.0 } else { 0.0 });
+    let scene = if escapes {
+        scene.answer(
+            "Speed left when far away (km/s)",
+            (speed * speed - escape * escape).sqrt() / KM,
+        )
+    } else {
+        scene.answer("Maximum height (km)", height / KM)
+    };
+    scene.view([0.0, 0.5 * (top + bottom)], 0.5 * (top - bottom))
+}
+
 // ---------------------------------------------------------------- Oscillations
 
 static SPRING_MASS: [Param; 3] = [
@@ -979,6 +1127,267 @@ fn simple_pendulum(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             (2.0 * G * length * (1.0 - amplitude.cos())).sqrt(),
         )
         .view([0.0, -0.5 * length], 1.2 * length)
+}
+
+static DAMPED: [Param; 4] = [
+    param("mass", "Mass", "kg", (0.1, 5.0), 0.1, 1.0),
+    param(
+        "stiffness",
+        "Spring constant k",
+        "N/m",
+        (1.0, 100.0),
+        1.0,
+        20.0,
+    ),
+    param("damping", "Damping b", "kg/s", (0.0, 12.0), 0.1, 0.5),
+    param(
+        "amplitude",
+        "Starting displacement",
+        "m",
+        (0.1, 1.5),
+        0.05,
+        0.8,
+    ),
+];
+
+/// Where the block of an oscillator sits when its spring is relaxed.
+const SPRING_REST: f64 = 2.0;
+
+/// A block on a smooth track against a wall, joined to it by a spring: the body of every oscillator here.
+fn oscillator(file: SceneFile, mass: f64, stiffness: f64, displacement: f64) -> SceneFile {
+    file.body(floor((0.0, 0.0)))
+        .body(BodySpec::fixed(
+            "wall",
+            ShapeSpec::Polygon(vec![[-0.3, 0.0], [0.0, 0.0], [0.0, 1.0], [-0.3, 1.0]]),
+        ))
+        .body(
+            BodySpec::rigid("block", mass, ShapeSpec::Rectangle([0.6, 0.5]))
+                .at(SPRING_REST + displacement, 0.25),
+        )
+        .constraint(ConstraintSpec::Slot {
+            body: "block".into(),
+            local: [0.0, 0.0],
+            origin: [0.0, 0.25],
+            direction: [1.0, 0.0],
+        })
+        .force(ForceSpec::Spring {
+            a: AnchorSpec::Fixed([0.0, 0.25]),
+            b: AnchorSpec::body_at("block", [-0.3, 0.0]),
+            stiffness,
+            rest_length: Some(SPRING_REST - 0.3),
+        })
+        .focus("block")
+}
+
+fn damped_oscillator(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m, k, b, amplitude) = (
+        p.get(spec, "mass"),
+        p.get(spec, "stiffness"),
+        p.get(spec, "damping"),
+        p.get(spec, "amplitude"),
+    );
+    let (gamma, omega0) = (b / (2.0 * m), (k / m).sqrt());
+    let oscillates = gamma < omega0;
+    let scene = oscillator(scene(spec), m, k, amplitude)
+        .force(ForceSpec::LinearDrag {
+            body: "block".into(),
+            coefficient: b,
+        })
+        .answer("Oscillates? (1 = yes)", if oscillates { 1.0 } else { 0.0 })
+        .answer("Period without damping (s)", exact::spring_period(m, k));
+    let scene = if oscillates {
+        scene.answer(
+            "Period (s)",
+            std::f64::consts::TAU / (omega0 * omega0 - gamma * gamma).sqrt(),
+        )
+    } else {
+        scene
+    };
+    let scene = if b > 0.0 {
+        scene.answer(
+            "Time for the swing to halve (s)",
+            std::f64::consts::LN_2 / gamma,
+        )
+    } else {
+        scene
+    };
+    scene.view([SPRING_REST, 0.5], 2.2)
+}
+
+static DRIVEN: [Param; 5] = [
+    param("mass", "Mass", "kg", (0.1, 5.0), 0.1, 1.0),
+    param(
+        "stiffness",
+        "Spring constant k",
+        "N/m",
+        (1.0, 100.0),
+        1.0,
+        20.0,
+    ),
+    param("damping", "Damping b", "kg/s", (0.05, 5.0), 0.05, 0.5),
+    param("force", "Driving force F₀", "N", (0.0, 10.0), 0.1, 2.0),
+    param(
+        "frequency",
+        "Driving frequency ω",
+        "rad/s",
+        (0.5, 15.0),
+        0.1,
+        4.0,
+    ),
+];
+
+fn driven_oscillator(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m, k, b, force, omega) = (
+        p.get(spec, "mass"),
+        p.get(spec, "stiffness"),
+        p.get(spec, "damping"),
+        p.get(spec, "force"),
+        p.get(spec, "frequency"),
+    );
+    let (gamma, omega0) = (b / (2.0 * m), (k / m).sqrt());
+    let (amplitude, lag) = exact::driven_response(m, k, b, force, omega);
+    // The starting wobble dies as e^(−γt); six of those times, then a few steady cycles to look at.
+    let duration = (6.0 / gamma + 5.0 * std::f64::consts::TAU / omega).clamp(10.0, 60.0);
+    let scene = oscillator(
+        SceneFile::new(spec.title, [0.0, -G], spec.dt).finish(FinishSpec::time(duration)),
+        m,
+        k,
+        0.0,
+    )
+    .force(ForceSpec::LinearDrag {
+        body: "block".into(),
+        coefficient: b,
+    })
+    .force(ForceSpec::Driving {
+        body: "block".into(),
+        amplitude: [force, 0.0],
+        angular_frequency: omega,
+        phase: 0.0,
+    })
+    .answer("Natural frequency ω₀ (rad/s)", omega0)
+    .answer("Steady amplitude (m)", amplitude)
+    .answer("Lag behind the force (°)", lag.to_degrees());
+    // The amplitude peaks a little below ω₀, and only if the damping is light enough for a peak at all.
+    let scene = if omega0 * omega0 > 2.0 * gamma * gamma {
+        scene
+            .answer(
+                "Frequency of the largest swing (rad/s)",
+                (omega0 * omega0 - 2.0 * gamma * gamma).sqrt(),
+            )
+            .answer(
+                "Largest steady amplitude (m)",
+                force / (b * (omega0 * omega0 - gamma * gamma).sqrt()),
+            )
+    } else {
+        scene
+    };
+    scene.frame([SPRING_REST, 0.5], (amplitude + 1.0).max(2.4), 2.2)
+}
+
+static COUPLED: [Param; 5] = [
+    param("mass", "Mass of each block", "kg", (0.1, 5.0), 0.1, 1.0),
+    param(
+        "stiffness",
+        "Outer springs k",
+        "N/m",
+        (1.0, 100.0),
+        1.0,
+        20.0,
+    ),
+    param("coupling", "Middle spring k′", "N/m", (0.0, 50.0), 0.5, 2.0),
+    param("first", "Left block starts at", "m", (-0.5, 0.5), 0.05, 0.4),
+    param(
+        "second",
+        "Right block starts at",
+        "m",
+        (-0.5, 0.5),
+        0.05,
+        0.0,
+    ),
+];
+
+fn coupled_oscillators(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m, k, coupling, first, second) = (
+        p.get(spec, "mass"),
+        p.get(spec, "stiffness"),
+        p.get(spec, "coupling"),
+        p.get(spec, "first"),
+        p.get(spec, "second"),
+    );
+    // Two blocks between two walls: wall, spring, block, spring, block, spring, wall. At rest the blocks sit at
+    // x = 2 and x = 4 and no spring is stretched.
+    let (left, right, far_wall, half) = (2.0, 4.0, 6.0, 0.3);
+    let together = (k / m).sqrt();
+    let against = ((k + 2.0 * coupling) / m).sqrt();
+    let block = |id: &str, at: f64| {
+        BodySpec::rigid(id, m, ShapeSpec::Rectangle([2.0 * half, 0.5])).at(at, 0.25)
+    };
+    let on_track = |id: &str| ConstraintSpec::Slot {
+        body: id.into(),
+        local: [0.0, 0.0],
+        origin: [0.0, 0.25],
+        direction: [1.0, 0.0],
+    };
+    let spring = |a: AnchorSpec, b: AnchorSpec, stiffness: f64, rest: f64| ForceSpec::Spring {
+        a,
+        b,
+        stiffness,
+        rest_length: Some(rest),
+    };
+    let wall = |id: &str, x: f64| {
+        BodySpec::fixed(
+            id,
+            ShapeSpec::Polygon(vec![[x, 0.0], [x + 0.3, 0.0], [x + 0.3, 1.0], [x, 1.0]]),
+        )
+    };
+    let scene = SceneFile::new(spec.title, [0.0, -G], spec.dt)
+        .body(floor((0.0, 0.0)))
+        .body(wall("left wall", -0.3))
+        .body(wall("right wall", far_wall))
+        .body(block("left block", left + first))
+        .body(block("right block", right + second))
+        .constraint(on_track("left block"))
+        .constraint(on_track("right block"))
+        .force(spring(
+            AnchorSpec::Fixed([0.0, 0.25]),
+            AnchorSpec::body_at("left block", [-half, 0.0]),
+            k,
+            left - half,
+        ))
+        .force(spring(
+            AnchorSpec::body_at("left block", [half, 0.0]),
+            AnchorSpec::body_at("right block", [-half, 0.0]),
+            coupling,
+            right - left - 2.0 * half,
+        ))
+        .force(spring(
+            AnchorSpec::body_at("right block", [half, 0.0]),
+            AnchorSpec::Fixed([far_wall, 0.25]),
+            k,
+            far_wall - right - half,
+        ))
+        .focus("left block")
+        .answer(
+            "Period moving together (s)",
+            std::f64::consts::TAU / together,
+        )
+        .answer(
+            "Period moving against each other (s)",
+            std::f64::consts::TAU / against,
+        );
+    // Started any other way the motion is both at once, and it passes from one block to the other and back.
+    let (scene, duration) = if coupling > 0.0 {
+        let handover = std::f64::consts::PI / (against - together);
+        (
+            scene.answer("Time for the motion to cross over (s)", handover),
+            (2.2 * handover).clamp(10.0, 40.0),
+        )
+    } else {
+        (scene, 10.0)
+    };
+    scene
+        .finish(FinishSpec::time(duration))
+        .frame([0.5 * far_wall, 0.5], 0.5 * far_wall + 0.6, 2.2)
 }
 
 // ---------------------------------------------------------------- Catalogue
@@ -1067,11 +1476,35 @@ static CATALOGUE: &[Scenario] = &[
         describe: seesaw,
     },
     Scenario {
+        spec: spec("circular-orbit", "Satellite in a circular orbit", "Fast enough sideways and falling becomes going round. The higher the orbit, the slower the satellite and the longer its year.", "Gravitation", "orbits", &CIRCULAR_ORBIT, 1.0, 11000.0),
+        describe: circular_orbit,
+    },
+    Scenario {
+        spec: spec("elliptical-orbit", "Elliptical orbit", "Give the satellite more than circular speed and the circle stretches into an ellipse. It races past the near point and crawls past the far one, sweeping equal areas in equal times.", "Gravitation", "Kepler's laws", &ELLIPTICAL_ORBIT, 2.0, 22000.0),
+        describe: elliptical_orbit,
+    },
+    Scenario {
+        spec: spec("escape-velocity", "Escape velocity", "Throw something straight up and it comes back, unless it leaves faster than 11.2 km/s. Then gravity slows it for ever and never stops it.", "Gravitation", "escape speed", &ESCAPE, 1.0, 10000.0),
+        describe: escape_velocity,
+    },
+    Scenario {
         spec: spec("spring-mass", "Mass on a spring", "Simple harmonic motion. The period depends on m and k, not on the amplitude.", "Oscillations", "simple harmonic motion", &SPRING_MASS, 1e-3, 6.0),
         describe: spring_mass,
     },
     Scenario {
         spec: spec("simple-pendulum", "Simple pendulum", "For small swings the period is 2π√(L/g). Release it from a large angle and see the period grow.", "Oscillations", "pendulum", &PENDULUM, 1e-3, 8.0),
         describe: simple_pendulum,
+    },
+    Scenario {
+        spec: spec("damped-oscillator", "Damped oscillator", "Friction that grows with speed steals a fixed fraction of the swing each cycle. Add enough and it stops oscillating at all.", "Oscillations", "damped oscillations", &DAMPED, 1e-3, 10.0),
+        describe: damped_oscillator,
+    },
+    Scenario {
+        spec: spec("driven-oscillator", "Driven oscillator and resonance", "Push in rhythm and the block settles into your rhythm, not its own. Push at its own frequency and the swing grows large: resonance.", "Oscillations", "forced oscillations and resonance", &DRIVEN, 1e-3, 30.0),
+        describe: driven_oscillator,
+    },
+    Scenario {
+        spec: spec("coupled-oscillators", "Coupled oscillators", "Two blocks joined by a weak spring. Start one and its motion drains into the other and comes back. Start them together, or exactly against each other, and it never does.", "Oscillations", "normal modes and beats", &COUPLED, 1e-3, 16.0),
+        describe: coupled_oscillators,
     },
 ];
