@@ -178,6 +178,10 @@ fn is_zero(v: &f64) -> bool {
     *v == 0.0
 }
 
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
 fn is_zero2(v: &[f64; 2]) -> bool {
     *v == [0.0, 0.0]
 }
@@ -303,6 +307,9 @@ pub enum ForceSpec {
         /// Defaults to the distance between the anchors at the start.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rest_length: Option<f64>,
+        /// A spring with a free end: it pushes when squeezed and does nothing when stretched.
+        #[serde(default, skip_serializing_if = "is_false")]
+        pushes_only: bool,
     },
     LinearDrag {
         body: String,
@@ -646,6 +653,7 @@ impl SceneFile {
                     b,
                     stiffness,
                     rest_length,
+                    pushes_only,
                 } => {
                     let (a, b) = (anchor(a)?, anchor(b)?);
                     let rest = rest_length.unwrap_or_else(|| {
@@ -654,7 +662,12 @@ impl SceneFile {
                     if let ForceSpec::Spring { rest_length, .. } = &mut explicit.forces[index] {
                         *rest_length = Some(rest);
                     }
-                    world.add_force(Spring::new(a, b, *stiffness, rest));
+                    let spring = Spring::new(a, b, *stiffness, rest);
+                    world.add_force(if *pushes_only {
+                        spring.pushing_only()
+                    } else {
+                        spring
+                    });
                 }
                 ForceSpec::LinearDrag { body, coefficient } => {
                     world.add_force(LinearDrag::new(lookup(body)?, *coefficient))

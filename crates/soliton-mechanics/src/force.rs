@@ -374,6 +374,7 @@ pub struct Spring {
     b: Anchor,
     stiffness: f64,
     rest_length: f64,
+    pushes_only: bool,
 }
 
 impl Spring {
@@ -383,7 +384,21 @@ impl Spring {
             b,
             stiffness,
             rest_length,
+            pushes_only: false,
         }
+    }
+
+    /// A spring with a free end: it pushes when it is squeezed shorter than its natural length and does nothing
+    /// when its ends are further apart than that. This is the spring a block runs into or a ball is dropped on,
+    /// massless as the textbook's is, with no plate on its end to have a mass of its own.
+    pub fn pushing_only(mut self) -> Self {
+        self.pushes_only = true;
+        self
+    }
+
+    /// Whether the free end has lost touch: the ends are further apart than the natural length.
+    fn slack(&self, extension: f64) -> bool {
+        self.pushes_only && extension > 0.0
     }
 
     fn extension(&self, bodies: &Bodies) -> (Vec2, f64) {
@@ -400,6 +415,9 @@ impl Force for Spring {
 
     fn apply(&self, bodies: &Bodies, _instant: Instant, loads: &mut Loads) {
         let (direction, extension) = self.extension(bodies);
+        if self.slack(extension) {
+            return;
+        }
         let on_b = direction * (-self.stiffness * extension);
         self.a.apply(bodies, self.label(), -on_b, loads);
         self.b.apply(bodies, self.label(), on_b, loads);
@@ -407,14 +425,22 @@ impl Force for Spring {
 
     fn potential_energy(&self, bodies: &Bodies) -> f64 {
         let (_, extension) = self.extension(bodies);
+        if self.slack(extension) {
+            return 0.0;
+        }
         0.5 * self.stiffness * extension * extension
     }
 
     fn sketches(&self, bodies: &Bodies) -> Vec<Sketch> {
-        vec![Sketch::Spring(
-            self.a.world_point(bodies),
-            self.b.world_point(bodies),
-        )]
+        let (from, to) = (self.a.world_point(bodies), self.b.world_point(bodies));
+        let (direction, extension) = self.extension(bodies);
+        // A free end that has lost touch stays where the relaxed spring ends, pointing at what it will meet.
+        let end = if self.slack(extension) {
+            from + direction * self.rest_length
+        } else {
+            to
+        };
+        vec![Sketch::Spring(from, end)]
     }
 }
 

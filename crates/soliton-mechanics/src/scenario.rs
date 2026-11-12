@@ -250,6 +250,46 @@ fn thrown_upward(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .view([0.0, 0.5 * apex], 0.6 * apex + 1.0)
 }
 
+static STOPPING: [Param; 2] = [
+    param(
+        "speed",
+        "Speed before braking",
+        "m/s",
+        (1.0, 30.0),
+        0.5,
+        10.0,
+    ),
+    param(
+        "friction",
+        "Kinetic friction μk",
+        "",
+        (0.05, 1.0),
+        0.01,
+        0.5,
+    ),
+];
+
+fn stopping_distance(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (u, mu) = (p.get(spec, "speed"), p.get(spec, "friction"));
+    let distance = exact::stopping_distance(u, mu, G);
+    let time = u / (mu * G);
+    SceneFile::new(spec.title, [0.0, -G], spec.dt)
+        .finish(FinishSpec::time(1.5 * time + 1.0))
+        .finish(FinishSpec::rest(0.5))
+        .body(floor((mu, mu)))
+        .body(
+            BodySpec::rigid("block", 2.0, ShapeSpec::Rectangle([0.8, 0.5]))
+                .at(0.0, 0.25)
+                .velocity(u, 0.0)
+                .restitution(0.0),
+        )
+        .focus("block")
+        .answer("Stopping distance (m)", distance)
+        .answer("Time to stop (s)", time)
+        .answer("Deceleration (m/s²)", mu * G)
+        .frame([0.5 * distance, 1.0], 0.5 * distance + 1.5, 2.5)
+}
+
 // ---------------------------------------------------------------- Motion in a plane
 
 static PROJECTILE: [Param; 2] = [
@@ -326,6 +366,100 @@ fn projectile_from_height(spec: &ScenarioSpec, p: &Params) -> SceneFile {
 /// Highest point of a flight launched from height `h` with vertical speed `uy`.
 fn apex_above(uy: f64, h: f64) -> f64 {
     h + (uy.max(0.0)).powi(2) / (2.0 * G)
+}
+
+static ON_INCLINE: [Param; 3] = [
+    param("speed", "Launch speed", "m/s", (2.0, 30.0), 0.5, 15.0),
+    param(
+        "elevation",
+        "Launch angle above the slope",
+        "°",
+        (5.0, 80.0),
+        1.0,
+        30.0,
+    ),
+    param("slope", "Slope angle", "°", (5.0, 45.0), 1.0, 25.0),
+];
+
+fn projectile_on_incline(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let u = p.get(spec, "speed");
+    let alpha = p.get(spec, "slope").to_radians();
+    // Measured from the slope, and kept short of straight up so the ball always comes down on the slope.
+    let beta = p
+        .get(spec, "elevation")
+        .min(85.0 - p.get(spec, "slope"))
+        .to_radians();
+    let theta = alpha + beta;
+    let range = 2.0 * u * u * beta.sin() * theta.cos() / (G * alpha.cos().powi(2));
+    let flight = 2.0 * u * beta.sin() / (G * alpha.cos());
+    let radius = 0.25;
+    // The ball starts resting just clear of the slope, so its centre flies and lands one radius above it:
+    // the textbook's point projectile on a slope moved out by the radius.
+    let (normal, _) = (Vec2::new(-alpha.sin(), alpha.cos()), ());
+    let start = normal * (radius + LAUNCH_GAP);
+    let run = 1.25 * range * alpha.cos() + 3.0;
+    let apex = (u * theta.sin()).powi(2) / (2.0 * G);
+    let top = apex.max(range * alpha.sin()) + 1.5;
+    SceneFile::new(spec.title, [0.0, -G], spec.dt)
+        .finish(FinishSpec::time(1.5 * flight + 1.0))
+        .finish(FinishSpec::contact("ball", "slope"))
+        .body(
+            BodySpec::fixed(
+                "slope",
+                ShapeSpec::Polygon(vec![[0.0, 0.0], [run, 0.0], [run, run * alpha.tan()]]),
+            )
+            .friction(1.0, 1.0),
+        )
+        .body(
+            ball("ball", 1.0, radius)
+                .at(start.x, start.y)
+                .velocity(u * theta.cos(), u * theta.sin())
+                .restitution(0.0),
+        )
+        .focus("ball")
+        .answer("Range along the slope (m)", range)
+        .answer("Time of flight (s)", flight)
+        .answer(
+            "Greatest range at this speed (m)",
+            u * u / (G * (1.0 + alpha.sin())),
+        )
+        .frame(
+            [0.5 * range * alpha.cos(), 0.5 * top - 0.5],
+            0.5 * range * alpha.cos() + 2.5,
+            0.5 * top + 0.5,
+        )
+}
+
+static CIRCULAR_MOTION: [Param; 3] = [
+    param("radius", "Length of the string", "m", (0.3, 3.0), 0.1, 1.0),
+    param("speed", "Speed", "m/s", (0.5, 10.0), 0.1, 3.0),
+    param("mass", "Mass of the stone", "kg", (0.1, 5.0), 0.1, 0.5),
+];
+
+fn circular_motion(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (r, v, m) = (
+        p.get(spec, "radius"),
+        p.get(spec, "speed"),
+        p.get(spec, "mass"),
+    );
+    let period = std::f64::consts::TAU * r / v;
+    // Seen from above, on a smooth table: gravity points into the page and does nothing in this plane.
+    SceneFile::new(spec.title, [0.0, 0.0], spec.dt)
+        .finish(FinishSpec::time(2.05 * period))
+        .body(
+            ball("stone", m, 0.08 * r.max(0.5))
+                .at(r, 0.0)
+                .velocity(0.0, v),
+        )
+        .constraint(ConstraintSpec::Rope {
+            nodes: vec![RopeNodeSpec::Peg([0.0, 0.0]), RopeNodeSpec::attach("stone")],
+            length: Some(r),
+        })
+        .focus("stone")
+        .answer("Centripetal acceleration (m/s²)", v * v / r)
+        .answer("Tension (N)", m * v * v / r)
+        .answer("Period (s)", period)
+        .view([0.0, 0.0], 1.5 * r)
 }
 
 // ---------------------------------------------------------------- Laws of motion
@@ -581,6 +715,168 @@ fn table_and_hanging_mass(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .view([1.0, -0.8], 3.0)
 }
 
+static CONNECTED: [Param; 4] = [
+    param("m1", "Block behind", "kg", (0.5, 10.0), 0.5, 2.0),
+    param("m2", "Block in front", "kg", (0.5, 10.0), 0.5, 3.0),
+    param("force", "Pull", "N", (0.0, 60.0), 0.5, 10.0),
+    param("friction", "Floor friction μ", "", (0.0, 0.8), 0.01, 0.0),
+];
+
+fn connected_blocks(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m1, m2, pull, mu) = (
+        p.get(spec, "m1"),
+        p.get(spec, "m2"),
+        p.get(spec, "force"),
+        p.get(spec, "friction"),
+    );
+    let total = m1 + m2;
+    let needed = mu * total * G;
+    let moves = pull > needed;
+    let block = |id: &str, mass: f64, x: f64| {
+        BodySpec::rigid(id, mass, ShapeSpec::Rectangle([0.8, 0.5]))
+            .at(x, 0.25)
+            .restitution(0.0)
+    };
+    let scene = scene(spec)
+        .body(floor((mu, mu)))
+        .body(block("block behind", m1, 0.0))
+        .body(block("block in front", m2, 1.6))
+        .constraint(ConstraintSpec::Rope {
+            nodes: vec![
+                RopeNodeSpec::Attach {
+                    body: "block behind".into(),
+                    local: [0.4, 0.0],
+                },
+                RopeNodeSpec::Attach {
+                    body: "block in front".into(),
+                    local: [-0.4, 0.0],
+                },
+            ],
+            length: None,
+        })
+        .force(ForceSpec::Applied {
+            body: "block in front".into(),
+            force: [pull, 0.0],
+            point: [0.4, 0.0],
+            from: None,
+            until: None,
+        })
+        .focus("block behind")
+        .finish(FinishSpec::rest(0.5))
+        .answer("Moves? (1 = yes)", if moves { 1.0 } else { 0.0 })
+        .answer(
+            "Acceleration (m/s²)",
+            if moves { pull / total - mu * G } else { 0.0 },
+        );
+    // Friction takes the same share from each block as the pull gives, so the string's tension does not depend on
+    // it. At rest the tension is not fixed by the laws of motion alone, and no answer is given.
+    let scene = if moves {
+        scene.answer("Tension (N)", m1 * pull / total)
+    } else {
+        scene.answer("Pull needed to move them (N)", needed)
+    };
+    scene.frame([3.0, 1.0], 5.5, 2.5)
+}
+
+static LIFT: [Param; 2] = [
+    param("mass", "Mass of the person", "kg", (20.0, 120.0), 1.0, 60.0),
+    param(
+        "acceleration",
+        "Acceleration of the lift, up is +",
+        "m/s²",
+        (-9.8, 5.0),
+        0.1,
+        2.0,
+    ),
+];
+
+fn lift(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m, a) = (p.get(spec, "mass"), p.get(spec, "acceleration"));
+    let cabin = 400.0;
+    let apparent = m * (G + a);
+    // The lift's floor is held upright on a vertical track and hauled by a cable pulling with exactly the force
+    // that gives floor and passenger the chosen acceleration. What the floor then pushes on the person with is
+    // what a weighing scale under their feet would read.
+    scene(spec)
+        .body(
+            BodySpec::rigid("lift floor", cabin, ShapeSpec::Rectangle([2.0, 0.2]))
+                .friction(0.8, 0.6)
+                .restitution(0.0),
+        )
+        .body(
+            BodySpec::rigid("person", m, ShapeSpec::Rectangle([0.5, 1.0]))
+                .at(0.0, 0.6)
+                .restitution(0.0),
+        )
+        .constraint(ConstraintSpec::Slot {
+            body: "lift floor".into(),
+            local: [0.0, 0.0],
+            origin: [0.0, 0.0],
+            direction: [0.0, 1.0],
+        })
+        .constraint(ConstraintSpec::FixedAngle {
+            body: "lift floor".into(),
+            angle: 0.0,
+        })
+        .force(ForceSpec::Applied {
+            body: "lift floor".into(),
+            force: [0.0, (cabin + m) * (G + a)],
+            point: [0.0, 0.0],
+            from: None,
+            until: None,
+        })
+        .focus("person")
+        .answer("True weight (N)", m * G)
+        .answer("Apparent weight (N)", apparent)
+        .answer("Scale reading (kg)", apparent / G)
+        .view([0.0, 1.0], 3.0)
+}
+
+static RECOIL: [Param; 3] = [
+    param("gun", "Mass of the gun", "kg", (1.0, 20.0), 0.5, 5.0),
+    param("shell", "Mass of the shell", "kg", (0.05, 2.0), 0.05, 0.5),
+    param("speed", "Speed of the shell", "m/s", (5.0, 60.0), 1.0, 20.0),
+];
+
+/// How long the charge pushes, seconds. Its length does not matter to the answer, only the impulse does.
+const FIRING_TIME: f64 = 0.02;
+
+fn recoil(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (gun, shell, v) = (
+        p.get(spec, "gun"),
+        p.get(spec, "shell"),
+        p.get(spec, "speed"),
+    );
+    // The charge pushes shell and gun apart with equal and opposite forces for a moment: Newton's third law.
+    let push = shell * v / FIRING_TIME;
+    let fire = |body: &str, force: f64| ForceSpec::Applied {
+        body: body.into(),
+        force: [force, 0.0],
+        point: [0.0, 0.0],
+        from: None,
+        until: Some(FIRING_TIME),
+    };
+    scene(spec)
+        .body(floor((0.0, 0.0)))
+        .body(
+            BodySpec::rigid("gun", gun, ShapeSpec::Rectangle([1.2, 0.4]))
+                .at(0.0, 0.2)
+                .restitution(0.0),
+        )
+        .body(ball("shell", shell, 0.1).at(0.75, 0.1).restitution(0.0))
+        .force(fire("shell", push))
+        .force(fire("gun", -push))
+        .focus("gun")
+        .answer("Recoil speed of the gun (m/s)", shell * v / gun)
+        .answer("Momentum of the shell (kg·m/s)", shell * v)
+        .answer("Total momentum (kg·m/s)", 0.0)
+        .answer(
+            "Share of the energy the shell carries (%)",
+            100.0 * gun / (gun + shell),
+        )
+        .frame([2.0, 0.6], 5.0, 2.2)
+}
+
 // ---------------------------------------------------------------- Work, energy and power
 
 static COLLISION: [Param; 5] = [
@@ -663,6 +959,176 @@ fn vertical_circle(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             (m * (u * u / length - 5.0 * G)).max(0.0),
         )
         .view([0.0, 0.0], 1.4 * length)
+}
+
+static SPRING_STOP: [Param; 3] = [
+    param("mass", "Mass of the block", "kg", (0.5, 5.0), 0.1, 1.0),
+    param("speed", "Speed of the block", "m/s", (0.5, 6.0), 0.1, 3.0),
+    param(
+        "stiffness",
+        "Spring constant k",
+        "N/m",
+        (20.0, 500.0),
+        5.0,
+        100.0,
+    ),
+];
+
+fn spring_compression(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m, u, k) = (
+        p.get(spec, "mass"),
+        p.get(spec, "speed"),
+        p.get(spec, "stiffness"),
+    );
+    let compression = u * (m / k).sqrt();
+    let (natural, gap) = (2.0, 1.5);
+    // Half an oscillation on the spring, between meeting it and leaving it.
+    let squeeze = std::f64::consts::PI * (m / k).sqrt();
+    SceneFile::new(spec.title, [0.0, -G], spec.dt)
+        .finish(FinishSpec::time(gap / u + squeeze + 0.6))
+        .body(floor((0.0, 0.0)))
+        .body(BodySpec::fixed(
+            "wall",
+            ShapeSpec::Polygon(vec![[-0.3, 0.0], [0.0, 0.0], [0.0, 1.0], [-0.3, 1.0]]),
+        ))
+        .body(
+            BodySpec::rigid("block", m, ShapeSpec::Rectangle([0.6, 0.5]))
+                .at(natural + 0.3 + gap, 0.25)
+                .velocity(-u, 0.0)
+                .restitution(0.0),
+        )
+        .constraint(ConstraintSpec::Slot {
+            body: "block".into(),
+            local: [0.0, 0.0],
+            origin: [0.0, 0.25],
+            direction: [1.0, 0.0],
+        })
+        // The spring's free end waits at its natural length and pushes only while the block squeezes it.
+        .force(ForceSpec::Spring {
+            a: AnchorSpec::Fixed([0.0, 0.25]),
+            b: AnchorSpec::body_at("block", [-0.3, 0.0]),
+            stiffness: k,
+            rest_length: Some(natural),
+            pushes_only: true,
+        })
+        .focus("block")
+        .answer("Greatest compression (m)", compression)
+        .answer("Greatest force of the spring (N)", k * compression)
+        .answer("Speed it comes back with (m/s)", u)
+        .frame([2.2, 0.6], 2.8, 2.2)
+}
+
+static DROP_SPRING: [Param; 3] = [
+    param("mass", "Mass of the ball", "kg", (0.2, 5.0), 0.1, 1.0),
+    param(
+        "height",
+        "Drop height above the spring",
+        "m",
+        (0.2, 3.0),
+        0.1,
+        1.0,
+    ),
+    param(
+        "stiffness",
+        "Spring constant k",
+        "N/m",
+        (100.0, 2000.0),
+        50.0,
+        500.0,
+    ),
+];
+
+fn ball_on_spring(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m, h, k) = (
+        p.get(spec, "mass"),
+        p.get(spec, "height"),
+        p.get(spec, "stiffness"),
+    );
+    // ½ k x² = m g (h + x): the ball falls h to the spring and then x more while squeezing it.
+    let weight = m * G;
+    let rest = weight / k;
+    let compression = (weight + (weight * weight + 2.0 * k * weight * h).sqrt()) / k;
+    let (natural, radius) = (1.2, 0.15);
+    // On the spring the ball is an oscillator about where it would rest, entered at speed √(2gh). It is back at
+    // the spring's free end after this long.
+    let (omega, arrival) = ((k / m).sqrt(), (2.0 * G * h).sqrt());
+    let squeeze = 2.0 * (arrival / omega).atan2(-rest) / omega;
+    SceneFile::new(spec.title, [0.0, -G], spec.dt)
+        // It ends a moment after the ball has left the spring, while it is still on its way back up.
+        .finish(FinishSpec::time(
+            (2.0 * h / G).sqrt() + squeeze + (0.6 * arrival / G).min(0.3),
+        ))
+        .body(floor((0.0, 0.0)))
+        .body(
+            ball("ball", m, radius)
+                .at(0.0, natural + h + radius)
+                .restitution(0.0),
+        )
+        .constraint(ConstraintSpec::Slot {
+            body: "ball".into(),
+            local: [0.0, 0.0],
+            origin: [0.0, 0.0],
+            direction: [0.0, 1.0],
+        })
+        .force(ForceSpec::Spring {
+            a: AnchorSpec::Fixed([0.0, 0.0]),
+            b: AnchorSpec::body_at("ball", [0.0, -radius]),
+            stiffness: k,
+            rest_length: Some(natural),
+            pushes_only: true,
+        })
+        .focus("ball")
+        .answer("Speed on reaching the spring (m/s)", arrival)
+        .answer("Greatest compression (m)", compression)
+        .answer("Compression it would rest at (m)", rest)
+        .view([0.0, 0.5 * (natural + h) + 0.3], 0.5 * (natural + h) + 0.9)
+}
+
+static OBLIQUE: [Param; 2] = [
+    param(
+        "speed",
+        "Speed of the incoming disc",
+        "m/s",
+        (1.0, 10.0),
+        0.1,
+        4.0,
+    ),
+    param(
+        "offset",
+        "Off-centre by, as a fraction of a diameter",
+        "",
+        (0.0, 0.95),
+        0.01,
+        0.5,
+    ),
+];
+
+fn oblique_collision(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (u, offset) = (p.get(spec, "speed"), p.get(spec, "offset"));
+    let radius = 0.3;
+    // At the moment they touch the line of centres makes this angle with the incoming path, and a smooth disc
+    // can only be pushed along that line.
+    let struck = offset.asin();
+    let disc = |id: &str, x: f64, y: f64, vx: f64| {
+        BodySpec::rigid(id, 1.0, ShapeSpec::Circle(radius))
+            .at(x, y)
+            .velocity(vx, 0.0)
+    };
+    // Seen from above, on a smooth table.
+    SceneFile::new(spec.title, [0.0, 0.0], spec.dt)
+        .finish(FinishSpec::time(6.0))
+        .finish(FinishSpec::contact("incoming disc", "struck disc").hold(1.2))
+        .body(disc("incoming disc", -3.0, offset * 2.0 * radius, u))
+        .body(disc("struck disc", 0.0, 0.0, 0.0))
+        .focus("incoming disc")
+        .answer("Speed of the struck disc (m/s)", u * struck.cos())
+        .answer("Speed of the incoming disc (m/s)", u * struck.sin())
+        .answer(
+            "Angle of the struck disc from the incoming path (°)",
+            struck.to_degrees(),
+        )
+        .answer("Angle between the two afterwards (°)", 90.0)
+        .frame([0.0, 0.0], 5.0, 3.5)
 }
 
 // ---------------------------------------------------------------- Rotation
@@ -898,6 +1364,51 @@ fn seesaw(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .view([0.0, 1.0], 2.5)
 }
 
+static TORQUE_ROD: [Param; 3] = [
+    param("torque", "Torque", "N·m", (0.5, 20.0), 0.5, 4.0),
+    param("mass", "Mass of the rod", "kg", (0.5, 10.0), 0.5, 2.0),
+    param("length", "Length of the rod", "m", (0.5, 3.0), 0.1, 2.0),
+];
+
+/// How long the rod is turned for, seconds.
+const TURNING_TIME: f64 = 2.0;
+
+fn torque_on_rod(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (torque, m, length) = (
+        p.get(spec, "torque"),
+        p.get(spec, "mass"),
+        p.get(spec, "length"),
+    );
+    // A thin uniform rod about one end: M L²/12 about its middle, plus M (L/2)² for moving the axis to the end.
+    let about_pivot = m * length * length / 3.0;
+    let alpha = torque / about_pivot;
+    // Seen from above, on a smooth table, pivoted at one end.
+    SceneFile::new(spec.title, [0.0, 0.0], spec.dt)
+        .finish(FinishSpec::time(TURNING_TIME))
+        .body(
+            BodySpec::rigid("rod", m, ShapeSpec::Rectangle([length, 0.08]))
+                .at(0.5 * length, 0.0)
+                .inertia(m * length * length / 12.0),
+        )
+        .constraint(ConstraintSpec::Pin {
+            a: AnchorSpec::body_at("rod", [-0.5 * length, 0.0]),
+            b: AnchorSpec::Fixed([0.0, 0.0]),
+        })
+        .force(ForceSpec::Torque {
+            body: "rod".into(),
+            torque,
+        })
+        .focus("rod")
+        .answer("Moment of inertia about the pivot (kg·m²)", about_pivot)
+        .answer("Angular acceleration (rad/s²)", alpha)
+        .answer("Angular speed after 2 s (rad/s)", alpha * TURNING_TIME)
+        .answer(
+            "Turns made in 2 s",
+            0.5 * alpha * TURNING_TIME * TURNING_TIME / std::f64::consts::TAU,
+        )
+        .view([0.0, 0.0], 1.3 * length)
+}
+
 // ---------------------------------------------------------------- Gravitation
 
 const BIG_G: f64 = 6.674e-11;
@@ -1089,6 +1600,7 @@ fn spring_mass(spec: &ScenarioSpec, p: &Params) -> SceneFile {
             b: AnchorSpec::body_at("block", [-0.3, 0.0]),
             stiffness: k,
             rest_length: Some(rest - 0.3),
+            pushes_only: false,
         })
         .focus("block")
         .answer("Period (s)", exact::spring_period(m, k))
@@ -1175,6 +1687,7 @@ fn oscillator(file: SceneFile, mass: f64, stiffness: f64, displacement: f64) -> 
             b: AnchorSpec::body_at("block", [-0.3, 0.0]),
             stiffness,
             rest_length: Some(SPRING_REST - 0.3),
+            pushes_only: false,
         })
         .focus("block")
 }
@@ -1333,6 +1846,7 @@ fn coupled_oscillators(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         b,
         stiffness,
         rest_length: Some(rest),
+        pushes_only: false,
     };
     let wall = |id: &str, x: f64| {
         BodySpec::fixed(
@@ -1390,6 +1904,167 @@ fn coupled_oscillators(spec: &ScenarioSpec, p: &Params) -> SceneFile {
         .frame([0.5 * far_wall, 0.5], 0.5 * far_wall + 0.6, 2.2)
 }
 
+static VERTICAL_SPRING: [Param; 2] = [
+    param("mass", "Mass", "kg", (0.1, 5.0), 0.1, 1.0),
+    param(
+        "stiffness",
+        "Spring constant k",
+        "N/m",
+        (10.0, 200.0),
+        1.0,
+        40.0,
+    ),
+];
+
+fn vertical_spring(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (m, k) = (p.get(spec, "mass"), p.get(spec, "stiffness"));
+    let stretch = m * G / k;
+    let period = exact::spring_period(m, k);
+    let (ceiling, natural) = (0.0, 1.0);
+    let release = ceiling - natural;
+    // Let go from where the spring is relaxed, the mass bobs between there and twice the stretch it would hang at.
+    SceneFile::new(spec.title, [0.0, -G], spec.dt)
+        .finish(FinishSpec::time(2.05 * period))
+        .body(BodySpec::fixed(
+            "ceiling",
+            ShapeSpec::Polygon(vec![[-1.0, 0.0], [1.0, 0.0], [1.0, 0.2], [-1.0, 0.2]]),
+        ))
+        .body(ball("mass", m, 0.15).at(0.0, release))
+        .constraint(ConstraintSpec::Slot {
+            body: "mass".into(),
+            local: [0.0, 0.0],
+            origin: [0.0, 0.0],
+            direction: [0.0, 1.0],
+        })
+        .force(ForceSpec::Spring {
+            a: AnchorSpec::Fixed([0.0, ceiling]),
+            b: AnchorSpec::body("mass"),
+            stiffness: k,
+            rest_length: Some(natural),
+            pushes_only: false,
+        })
+        .focus("mass")
+        .answer("Stretch it would hang at (m)", stretch)
+        .answer("Lowest point below the release (m)", 2.0 * stretch)
+        .answer("Period (s)", period)
+        .answer("Greatest speed (m/s)", stretch * (k / m).sqrt())
+        .view(
+            [0.0, 0.5 * (0.4 + release - 2.0 * stretch - 0.4)],
+            0.5 * (0.4 - (release - 2.0 * stretch - 0.4)),
+        )
+}
+
+static TWO_SPRINGS: [Param; 4] = [
+    param("k1", "First spring k₁", "N/m", (5.0, 200.0), 1.0, 30.0),
+    param("k2", "Second spring k₂", "N/m", (5.0, 200.0), 1.0, 60.0),
+    param("mass", "Mass of the block", "kg", (0.1, 5.0), 0.1, 1.0),
+    param("amplitude", "Pulled out by", "m", (0.1, 1.0), 0.05, 0.5),
+];
+
+fn two_springs(spec: &ScenarioSpec, p: &Params) -> (f64, f64, f64, f64) {
+    (
+        p.get(spec, "k1"),
+        p.get(spec, "k2"),
+        p.get(spec, "mass"),
+        p.get(spec, "amplitude"),
+    )
+}
+
+/// A block on a smooth track to the right of a wall, its left face at `face`, for the two-spring scenes.
+fn spring_block(file: SceneFile, mass: f64, face: f64) -> SceneFile {
+    file.body(floor((0.0, 0.0)))
+        .body(BodySpec::fixed(
+            "wall",
+            ShapeSpec::Polygon(vec![[-0.3, 0.0], [0.0, 0.0], [0.0, 1.0], [-0.3, 1.0]]),
+        ))
+        .body(BodySpec::rigid("block", mass, ShapeSpec::Rectangle([0.6, 0.5])).at(face + 0.3, 0.25))
+        .constraint(ConstraintSpec::Slot {
+            body: "block".into(),
+            local: [0.0, 0.0],
+            origin: [0.0, 0.25],
+            direction: [1.0, 0.0],
+        })
+        .constraint(ConstraintSpec::FixedAngle {
+            body: "block".into(),
+            angle: 0.0,
+        })
+        .focus("block")
+}
+
+fn springs_in_series(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (k1, k2, m, amplitude) = two_springs(spec, p);
+    let effective = k1 * k2 / (k1 + k2);
+    let period = exact::spring_period(m, effective);
+    let natural = 1.5;
+    // End to end both springs carry the same force, so the softer one stretches more. The join starts where
+    // that already holds, and so has nothing to shake about.
+    let first = amplitude * k2 / (k1 + k2);
+    // The join between two springs has no mass in the textbook. Here it is a five-hundredth of the block,
+    // and never so light that the springs would shake it faster than the time step can follow.
+    let join = (0.002 * m).max(4.0 * (k1 + k2) * spec.dt * spec.dt);
+    spring_block(
+        SceneFile::new(spec.title, [0.0, -G], spec.dt).finish(FinishSpec::time(2.05 * period)),
+        m,
+        2.0 * natural + amplitude,
+    )
+    .body(ball("join", join, 0.06).at(natural + first, 0.25))
+    .constraint(ConstraintSpec::Slot {
+        body: "join".into(),
+        local: [0.0, 0.0],
+        origin: [0.0, 0.25],
+        direction: [1.0, 0.0],
+    })
+    .force(ForceSpec::Spring {
+        a: AnchorSpec::Fixed([0.0, 0.25]),
+        b: AnchorSpec::body("join"),
+        stiffness: k1,
+        rest_length: Some(natural),
+        pushes_only: false,
+    })
+    .force(ForceSpec::Spring {
+        a: AnchorSpec::body("join"),
+        b: AnchorSpec::body_at("block", [-0.3, 0.0]),
+        stiffness: k2,
+        rest_length: Some(natural),
+        pushes_only: false,
+    })
+    .answer("Effective spring constant (N/m)", effective)
+    .answer("Period (s)", period)
+    .answer("Stretch of the first spring at the start (m)", first)
+    .answer(
+        "Stretch of the second spring at the start (m)",
+        amplitude - first,
+    )
+    .frame([natural + 0.3, 0.6], natural + 1.6, 2.2)
+}
+
+fn springs_in_parallel(spec: &ScenarioSpec, p: &Params) -> SceneFile {
+    let (k1, k2, m, amplitude) = two_springs(spec, p);
+    let effective = k1 + k2;
+    let period = exact::spring_period(m, effective);
+    let natural = 2.0;
+    // Side by side both springs stretch by the same amount, so their forces add.
+    let side = |stiffness: f64, height: f64| ForceSpec::Spring {
+        a: AnchorSpec::Fixed([0.0, 0.25 + height]),
+        b: AnchorSpec::body_at("block", [-0.3, height]),
+        stiffness,
+        rest_length: Some(natural),
+        pushes_only: false,
+    };
+    spring_block(
+        SceneFile::new(spec.title, [0.0, -G], spec.dt).finish(FinishSpec::time(2.05 * period)),
+        m,
+        natural + amplitude,
+    )
+    .force(side(k1, 0.13))
+    .force(side(k2, -0.13))
+    .answer("Effective spring constant (N/m)", effective)
+    .answer("Period (s)", period)
+    .answer("Pull of the first spring at the start (N)", k1 * amplitude)
+    .answer("Pull of the second spring at the start (N)", k2 * amplitude)
+    .frame([natural, 0.6], natural + 0.8, 2.2)
+}
+
 // ---------------------------------------------------------------- Catalogue
 
 #[allow(clippy::too_many_arguments)]
@@ -1428,6 +2103,10 @@ static CATALOGUE: &[Scenario] = &[
         describe: thrown_upward,
     },
     Scenario {
+        spec: spec("stopping-distance", "Stopping distance", "A block sliding on a rough floor. Double the speed and it travels four times as far before it stops.", "Motion in a straight line", "uniform retardation", &STOPPING, 1e-3, 4.0),
+        describe: stopping_distance,
+    },
+    Scenario {
         spec: spec("projectile", "Projectile", "Horizontal motion at constant speed, vertical motion under gravity, together a parabola.", "Motion in a plane", "projectile motion", &PROJECTILE, 1e-3, 5.0),
         describe: projectile,
     },
@@ -1436,12 +2115,32 @@ static CATALOGUE: &[Scenario] = &[
         describe: projectile_from_height,
     },
     Scenario {
+        spec: spec("projectile-on-incline", "Projectile on an incline", "Thrown up a slope, the ball lands sooner than it would on level ground. The longest throw is aimed halfway between the slope and straight up.", "Motion in a plane", "projectile motion", &ON_INCLINE, 1e-3, 5.0),
+        describe: projectile_on_incline,
+    },
+    Scenario {
+        spec: spec("circular-motion", "Uniform circular motion", "A stone whirled on a string, seen from above. Its speed never changes, yet it is accelerating all the time: the string keeps pulling it off the straight line it would otherwise take.", "Motion in a plane", "uniform circular motion", &CIRCULAR_MOTION, 1e-3, 4.0),
+        describe: circular_motion,
+    },
+    Scenario {
         spec: spec("incline-friction", "Block on a rough incline", "Static friction holds the block until tan θ exceeds μs. Then kinetic friction takes over and it accelerates.", "Laws of motion", "friction", &INCLINE, 1e-3, 3.0),
         describe: incline_friction,
     },
     Scenario {
         spec: spec("pushed-block", "Pushing a block on a rough floor", "Below μs N the block does not move and friction equals your push exactly. Above it, kinetic friction is smaller and the block accelerates.", "Laws of motion", "friction", &PUSHED, 1e-3, 3.0),
         describe: pushed_block,
+    },
+    Scenario {
+        spec: spec("connected-blocks", "Two blocks joined by a string", "Pull the front block and the string drags the other along. The string only has to accelerate the block behind it, so its tension is a fixed share of your pull.", "Laws of motion", "connected bodies", &CONNECTED, 1e-3, 3.0),
+        describe: connected_blocks,
+    },
+    Scenario {
+        spec: spec("lift", "Apparent weight in a lift", "You feel heavier when a lift starts upward and lighter when it starts down. A scale reads the push of the floor, not the pull of the Earth.", "Laws of motion", "apparent weight", &LIFT, 1e-3, 3.0),
+        describe: lift,
+    },
+    Scenario {
+        spec: spec("recoil", "Recoil of a gun", "Shell and gun push each other apart with equal forces for the same time, so they leave with equal and opposite momentum. The light one gets nearly all the energy.", "Laws of motion", "conservation of momentum", &RECOIL, 1e-3, 2.0),
+        describe: recoil,
     },
     Scenario {
         spec: spec("atwood", "Atwood machine", "Two masses on a string over a massless pulley. The heavier side descends with the same acceleration the lighter side rises.", "Laws of motion", "connected bodies", &ATWOOD, 1e-3, 2.0),
@@ -1460,6 +2159,18 @@ static CATALOGUE: &[Scenario] = &[
         describe: vertical_circle,
     },
     Scenario {
+        spec: spec("spring-compression", "A block runs into a spring", "The block's kinetic energy goes into the spring until none is left, then the spring gives all of it back.", "Work, energy and power", "elastic potential energy", &SPRING_STOP, 1e-3, 5.0),
+        describe: spring_compression,
+    },
+    Scenario {
+        spec: spec("ball-on-spring", "A ball dropped onto a spring", "The spring is squeezed further than the ball's weight alone would squeeze it: the ball arrives moving, and keeps losing height while the spring slows it.", "Work, energy and power", "conservation of mechanical energy", &DROP_SPRING, 1e-3, 4.0),
+        describe: ball_on_spring,
+    },
+    Scenario {
+        spec: spec("oblique-collision", "A glancing collision", "Two equal discs on a smooth table, seen from above. However off-centre the hit, they leave at right angles to each other.", "Work, energy and power", "collisions in two dimensions", &OBLIQUE, 1e-3, 6.0),
+        describe: oblique_collision,
+    },
+    Scenario {
         spec: spec("rolling", "Rolling down an incline", "Friction makes it roll instead of slide, but only if there is enough of it. Compare a disc and a ring.", "System of particles and rotational motion", "rolling motion", &ROLLING, 1e-3, 3.0),
         describe: rolling,
     },
@@ -1476,6 +2187,10 @@ static CATALOGUE: &[Scenario] = &[
         describe: seesaw,
     },
     Scenario {
+        spec: spec("torque-on-rod", "Torque on a pivoted rod", "A steady twist on a rod pivoted at one end, seen from above. It speeds up at a constant rate, and how fast depends on where its mass is, not only how much there is.", "System of particles and rotational motion", "rotational dynamics", &TORQUE_ROD, 1e-3, 2.0),
+        describe: torque_on_rod,
+    },
+    Scenario {
         spec: spec("circular-orbit", "Satellite in a circular orbit", "Fast enough sideways and falling becomes going round. The higher the orbit, the slower the satellite and the longer its year.", "Gravitation", "orbits", &CIRCULAR_ORBIT, 1.0, 11000.0),
         describe: circular_orbit,
     },
@@ -1490,6 +2205,18 @@ static CATALOGUE: &[Scenario] = &[
     Scenario {
         spec: spec("spring-mass", "Mass on a spring", "Simple harmonic motion. The period depends on m and k, not on the amplitude.", "Oscillations", "simple harmonic motion", &SPRING_MASS, 1e-3, 6.0),
         describe: spring_mass,
+    },
+    Scenario {
+        spec: spec("vertical-spring", "A mass on a vertical spring", "Gravity moves the middle of the swing down, to where the mass would hang at rest, and changes nothing else: the period is the same as on a level table.", "Oscillations", "simple harmonic motion", &VERTICAL_SPRING, 1e-3, 4.0),
+        describe: vertical_spring,
+    },
+    Scenario {
+        spec: spec("springs-in-series", "Springs in series", "Two springs end to end are softer than either alone: each one stretches, and the stretches add.", "Oscillations", "combinations of springs", &TWO_SPRINGS, 1e-3, 4.0),
+        describe: springs_in_series,
+    },
+    Scenario {
+        spec: spec("springs-in-parallel", "Springs in parallel", "Two springs side by side are stiffer than either alone: they stretch together, and their pulls add.", "Oscillations", "combinations of springs", &TWO_SPRINGS, 1e-3, 4.0),
+        describe: springs_in_parallel,
     },
     Scenario {
         spec: spec("simple-pendulum", "Simple pendulum", "For small swings the period is 2π√(L/g). Release it from a large angle and see the period grow.", "Oscillations", "pendulum", &PENDULUM, 1e-3, 8.0),
