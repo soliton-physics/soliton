@@ -19,8 +19,8 @@ Exit: every row in the catalogue table passes its closed-form test; three teache
 ## Phase 2: Rotation, gravitation, class 12 fields
 
 - ~~Massive pulleys with no-slip rope, flywheels~~ done; rolling that emerges from friction (done in phase 1)
-- Newtonian gravity between bodies: orbits, Kepler's laws, escape velocity
-- Oscillations beyond the basics: damped, driven, resonance curves, coupled oscillators
+- ~~Newtonian gravity between bodies: orbits, Kepler's laws, escape velocity~~ done (009)
+- ~~Damped, driven and coupled oscillators~~ done (009); a resonance curve as a graph remains
 - ~~Event timing by interpolation so reported impact and landing times are accurate to second order~~ done
 
 Held until a teacher asks for it: charged particles in uniform electric and magnetic fields (class 12). The force
