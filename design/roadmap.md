@@ -14,6 +14,8 @@ with textbook answers reproduced and free-body diagrams that show the engine's o
 - Python package with NumPy output and notebook examples (005)
 - Playground: scenario picker, parameter sliders, vectors, free-body diagram, graphs (006)
 
+- ~~The rest of the class 11 catalogue that fits in a plane~~ done (010): 35 scenarios
+
 Exit: every row in the catalogue table passes its closed-form test; three teachers have used it.
 
 ## Phase 2: Rotation, gravitation, class 12 fields

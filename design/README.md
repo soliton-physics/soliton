@@ -29,3 +29,4 @@ A document states the physics, the numerical method, the public API, and how the
 | [007](007-fields-baseline.md) | Spectral field solvers: what exists and what follows | Implemented (baseline) |
 | [008](008-interaction.md) | A hand on the physics: grabbing, picking, snapshots | Implemented |
 | [009](009-gravitation-and-oscillators.md) | Newtonian gravitation, orbits, damped and driven oscillators | Implemented |
+| [010](010-class-11-catalogue.md) | The rest of the class 11 catalogue; a free-ended spring; what counts as an impact | Implemented |
