@@ -262,7 +262,12 @@ impl ConstraintSolver {
                     .material(c.a)
                     .restitution
                     .min(bodies.material(c.b).restitution);
-                if row.active && pre[r] < -restitution_threshold {
+                // An impact is an approach faster than the forces on the pair could have produced in a few steps.
+                // Gravity sets that speed for a body resting on the ground; a spring pressing a light plate
+                // against a block sets a far higher one, and that contact is a steady push, not a blow. Treating
+                // it as a blow every step would skip the predictor and make the contact first order.
+                let pushed = 4.0 * accelerations[row.source].abs() * dt + 1e-6;
+                if row.active && pre[r] < -restitution_threshold.max(pushed) {
                     let delay = (c.depth.max(0.0) / -pre[r]).min(dt);
                     let approach = pre[r] - accelerations[row.source] * delay;
                     row.bias = -restitution * approach + accelerations[row.source] * delay;

@@ -463,3 +463,63 @@ fn a_frictionless_surface_reports_no_friction_events() {
         0
     );
 }
+
+/// A block runs into a light plate on the end of a spring. From then on the spring presses the plate against the
+/// block with a force that would give the plate alone an enormous acceleration. That is a steady push through
+/// the plate, not a blow every step: treated as blows it gained 6 % in energy and booked 80 J as "dissipated".
+#[test]
+fn a_spring_pressing_a_light_plate_against_a_block_is_a_push_not_a_blow() {
+    use soliton_mechanics::{Anchor, Slot, Spring};
+    let (mass, plate_mass, speed, stiffness) = (1.0, 0.002, 3.0, 100.0);
+    let mut world = World::new(Vec2::new(0.0, -G));
+    world.add(Body::fixed(HalfPlane::new(Vec2::Y, 0.0)));
+    let plate = world.add(
+        Body::rigid(plate_mass, Polygon::rectangle(0.1, 0.5))
+            .at(2.05, 0.25)
+            .restitution(0.0),
+    );
+    let block = world.add(
+        Body::rigid(mass, Polygon::rectangle(0.6, 0.5))
+            .at(3.9, 0.25)
+            .velocity(-speed, 0.0)
+            .restitution(0.0),
+    );
+    for body in [plate, block] {
+        world.add_constraint(Slot::along(body, Vec2::new(0.0, 0.25), Vec2::X));
+    }
+    world.add_force(Spring::new(
+        Anchor::Fixed(Vec2::new(0.0, 0.25)),
+        Anchor::Body {
+            id: plate,
+            local: Vec2::new(-0.05, 0.0),
+        },
+        stiffness,
+        2.0,
+    ));
+    let mut sim = Simulation::new(world, 1e-3);
+    let start = sim.energy().conserved();
+    let mut nearest = f64::INFINITY;
+    for _ in 0..900 {
+        sim.step();
+        nearest = nearest.min(sim.world().bodies().position(block).x);
+    }
+    // ½ m u² = ½ k x², less the thousandth the plate's own mass takes at the first touch.
+    let squeezed = 3.9 - 1.5 - nearest;
+    let expected = speed * (mass / stiffness).sqrt();
+    assert!(
+        relative(squeezed, expected) < 3e-3,
+        "squeezed {squeezed}, expected {expected}"
+    );
+    let energy = sim.energy();
+    assert!(
+        energy.dissipated.abs() < 0.05,
+        "dissipated {}",
+        energy.dissipated
+    );
+    assert!(
+        relative(energy.conserved(), start) < 1e-2,
+        "energy {} -> {}",
+        start,
+        energy.conserved()
+    );
+}

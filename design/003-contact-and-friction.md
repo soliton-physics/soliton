@@ -63,7 +63,8 @@ For each contact row, with relative normal velocity `v_n` before the solve:
 Newton's restitution with coefficient `e` on the pre-impact velocity. `e = 1` conserves kinetic energy exactly at the
 velocity level, so an elastic collision reproduces the textbook outgoing velocities to solver tolerance. Restitution is
 applied only when the approach speed exceeds `4 |g| dt + 1e-6`, several times the speed a resting body acquires in
-one step, so resting contact never micro-bounces. The pair's coefficient is the smaller of the two bodies' values;
+one step, so resting contact never micro-bounces. Where something other than gravity presses the two together
+harder than that, a spring behind a light plate for one, the threshold follows that force instead (010). The pair's coefficient is the smaller of the two bodies' values;
 friction coefficients are the larger of the two, so a scene that specifies friction on the surface alone behaves as
 the textbook intends.
 
