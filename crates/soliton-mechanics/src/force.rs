@@ -539,24 +539,103 @@ pub struct Grab {
     pub target: Vec2,
 }
 
-/// Natural frequency of the hand's spring, rad/s. Stiff enough to follow the pointer closely, soft enough that
-/// `ω dt` stays small at the time steps the catalogue uses.
-const GRAB_FREQUENCY: f64 = 30.0;
-/// The spring stops stretching here, in metres, so a pointer flung across the screen cannot launch a body at any speed.
-const GRAB_REACH: f64 = 1.5;
+/// Natural frequency of the hand's spring, rad/s, at ordinary time steps: stiff enough to follow the pointer closely.
+pub(crate) const GRAB_FREQUENCY: f64 = 30.0;
+/// The largest `ω dt` the spring is allowed, so a scene stepped in seconds (an orbit) gets a correspondingly
+/// slower hand instead of an unstable one.
+pub(crate) const GRAB_STEP_LIMIT: f64 = 0.5;
+/// The most the hand can accelerate a body, m/s²: 1.5 m of stretch at the ordinary frequency. A pointer flung
+/// across the screen cannot launch a body at any speed.
+const GRAB_ACCELERATION: f64 = 1.5 * GRAB_FREQUENCY * GRAB_FREQUENCY;
 
 impl Grab {
-    pub(crate) fn apply(&self, bodies: &Bodies, loads: &mut Loads) {
+    pub(crate) fn apply(&self, bodies: &Bodies, loads: &mut Loads, frequency: f64) {
         let mass = bodies.mass(self.body);
         let point = bodies.world_point(self.body, self.local);
         let mut stretch = self.target - point;
         let length = stretch.length();
-        if length > GRAB_REACH {
-            stretch = stretch * (GRAB_REACH / length);
+        let reach = GRAB_ACCELERATION / (frequency * frequency);
+        if length > reach {
+            stretch = stretch * (reach / length);
         }
-        let stiffness = mass * GRAB_FREQUENCY * GRAB_FREQUENCY;
-        let damping = 2.0 * mass * GRAB_FREQUENCY;
+        let stiffness = mass * frequency * frequency;
+        let damping = 2.0 * mass * frequency;
         let force = stretch * stiffness - bodies.point_velocity(self.body, point) * damping;
         loads.apply(bodies, self.body, ForceLabel::Applied, force, point);
+    }
+}
+
+/// Newton's law of gravitation, `F = G m₁ m₂ / r²` along the line joining the two (design 009). Every pair of
+/// dynamic bodies attracts, and so does each fixed source, a mass at a point that is not itself moved: the planet
+/// a satellite goes round. It reports as `gravity` and has a potential, `−G m₁ m₂ / r`.
+#[derive(Clone, Debug)]
+pub struct Gravitation {
+    constant: f64,
+    sources: Vec<(Vec2, f64)>,
+}
+
+impl Gravitation {
+    pub fn new(constant: f64) -> Self {
+        Self {
+            constant,
+            sources: Vec::new(),
+        }
+    }
+
+    /// Adds a fixed mass at a point.
+    pub fn source(mut self, at: Vec2, mass: f64) -> Self {
+        self.sources.push((at, mass));
+        self
+    }
+
+    fn movers(bodies: &Bodies) -> impl Iterator<Item = BodyId> + '_ {
+        bodies.ids().filter(|&id| bodies.is_dynamic(id))
+    }
+}
+
+/// The attraction on a mass at `at` from a mass at `from`, per unit of the product `G m₁ m₂`.
+/// Coincident points attract with nothing rather than with infinity.
+fn inverse_square(at: Vec2, from: Vec2) -> Vec2 {
+    let separation = from - at;
+    let distance = separation.length();
+    if distance == 0.0 {
+        Vec2::ZERO
+    } else {
+        separation / (distance * distance * distance)
+    }
+}
+
+impl Force for Gravitation {
+    fn label(&self) -> ForceLabel {
+        ForceLabel::Gravity
+    }
+
+    fn apply(&self, bodies: &Bodies, _instant: Instant, loads: &mut Loads) {
+        for id in Self::movers(bodies) {
+            let (at, mass) = (bodies.position(id), bodies.mass(id));
+            let mut pull = Vec2::ZERO;
+            for &(from, source_mass) in &self.sources {
+                pull += inverse_square(at, from) * source_mass;
+            }
+            for other in Self::movers(bodies).filter(|&other| other != id) {
+                pull += inverse_square(at, bodies.position(other)) * bodies.mass(other);
+            }
+            loads.apply(bodies, id, self.label(), pull * (self.constant * mass), at);
+        }
+    }
+
+    fn potential_energy(&self, bodies: &Bodies) -> f64 {
+        let mut energy = 0.0;
+        let movers: Vec<BodyId> = Self::movers(bodies).collect();
+        for (k, &id) in movers.iter().enumerate() {
+            let (at, mass) = (bodies.position(id), bodies.mass(id));
+            for &(from, source_mass) in &self.sources {
+                energy -= mass * source_mass / (from - at).length();
+            }
+            for &other in &movers[k + 1..] {
+                energy -= mass * bodies.mass(other) / (bodies.position(other) - at).length();
+            }
+        }
+        self.constant * energy
     }
 }

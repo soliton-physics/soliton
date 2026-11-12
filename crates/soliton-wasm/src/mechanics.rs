@@ -146,6 +146,7 @@ impl MechanicsWorld {
             exact,
             view,
             finish,
+            playback: _,
         } = file.build().map_err(|e| JsError::new(&e.to_string()))?;
         let mut sim = Simulation::new(world, dt);
         sim.finish_when(finish);
@@ -253,6 +254,11 @@ impl MechanicsWorld {
             .snapshot(self.sim.world(), self.sim.time())
             .map(|file| file.to_json())
             .map_err(|e| JsError::new(&e.to_string()))
+    }
+
+    /// Seconds of the simulation to show per second of watching; one unless the scene says otherwise.
+    pub fn playback(&self) -> f64 {
+        self.file.playback.unwrap_or(1.0)
     }
 
     /// The problem's time window, when the scene has one.

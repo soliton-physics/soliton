@@ -2,7 +2,9 @@ use crate::body::{Bodies, Body, BodyId};
 use crate::constraint::{Constraint, Sketch};
 use crate::contact::{detect, Contact};
 use crate::event::{Event, EventKind};
-use crate::force::{Force, ForceSample, Grab, Gravity, Instant, Loads, WorkClass};
+use crate::force::{
+    Force, ForceSample, Grab, Gravity, Instant, Loads, WorkClass, GRAB_FREQUENCY, GRAB_STEP_LIMIT,
+};
 use crate::solver::ConstraintSolver;
 use soliton_core::Vec2;
 
@@ -21,6 +23,7 @@ pub struct World {
     has_velocity_forces: bool,
     has_windowed_forces: bool,
     grab: Option<Grab>,
+    grab_frequency: f64,
     /// The hand changed since the loads were last evaluated, so they must not be reused for the next opening kick.
     grab_changed: bool,
 }
@@ -41,6 +44,7 @@ impl World {
             has_velocity_forces: false,
             has_windowed_forces: false,
             grab: None,
+            grab_frequency: GRAB_FREQUENCY,
             grab_changed: false,
         };
         world.add_force(Gravity { g: gravity });
@@ -104,6 +108,11 @@ impl World {
         if self.grab.take().is_some() {
             self.grab_changed = true;
         }
+    }
+
+    /// Tells the world its time step, which bounds how stiff the hand's spring may be.
+    pub(crate) fn set_time_step(&mut self, dt: f64) {
+        self.grab_frequency = GRAB_FREQUENCY.min(GRAB_STEP_LIMIT / dt);
     }
 
     pub fn grabbed(&self) -> Option<Grab> {
@@ -181,7 +190,7 @@ impl World {
             force.apply(&self.bodies, instant, &mut self.loads);
         }
         if let Some(grab) = &self.grab {
-            grab.apply(&self.bodies, &mut self.loads);
+            grab.apply(&self.bodies, &mut self.loads, self.grab_frequency);
         }
     }
 

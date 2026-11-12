@@ -33,6 +33,7 @@ impl Simulation {
         dt: f64,
     ) -> Self {
         assert!(dt > 0.0, "time step must be positive");
+        world.set_time_step(dt);
         world.evaluate_loads(Instant::opening(0.0));
         world.initialize_reactions(dt);
         let previous_power = world.power();

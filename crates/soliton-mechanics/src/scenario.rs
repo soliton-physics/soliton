@@ -113,6 +113,8 @@ pub struct Scene {
     pub exact: Vec<(String, f64)>,
     pub view: View,
     pub finish: Vec<Finish>,
+    /// Seconds of the simulation to show per second of watching.
+    pub playback: f64,
 }
 
 impl std::fmt::Debug for Scene {

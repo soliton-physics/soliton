@@ -4,7 +4,9 @@
 use crate::body::{Body, BodyId};
 use crate::constraint::{FixedAngle, PinJoint, Rod, Slot};
 use crate::finish::{Finish, Trigger};
-use crate::force::{Anchor, Applied, Driving, LinearDrag, QuadraticDrag, Spring, Torque};
+use crate::force::{
+    Anchor, Applied, Driving, Gravitation, LinearDrag, QuadraticDrag, Spring, Torque,
+};
 use crate::rope::{Rope, RopeNode, Wrap};
 use crate::scenario::{Scene, View};
 use crate::shape::{Circle, HalfPlane, Polygon, Shape};
@@ -59,6 +61,10 @@ pub struct SceneFile {
     /// Where the problem ends; the first rule to fire wins. Front ends pause there.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub finish: Vec<FinishSpec>,
+    /// Seconds of the simulation a front end should show per second of watching, when real time would be far
+    /// too slow: an orbit takes ninety minutes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -313,6 +319,20 @@ pub enum ForceSpec {
         #[serde(default, skip_serializing_if = "is_zero")]
         phase: f64,
     },
+    /// Newton's gravitation between every pair of moving bodies, and from each fixed mass.
+    Gravitation {
+        constant: f64,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        fixed: Vec<SourceSpec>,
+    },
+}
+
+/// A mass at a point that attracts but is not moved.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceSpec {
+    pub at: [f64; 2],
+    pub mass: f64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -405,6 +425,7 @@ impl SceneFile {
             answers: Vec::new(),
             view: None,
             finish: Vec::new(),
+            playback: None,
         }
     }
 
@@ -468,6 +489,11 @@ impl SceneFile {
             half_height,
             half_width: Some(half_width),
         });
+        self
+    }
+
+    pub fn playback(mut self, rate: f64) -> Self {
+        self.playback = Some(rate);
         self
     }
 
@@ -562,6 +588,12 @@ impl SceneFile {
         if self.bodies.is_empty() {
             return err("a scene needs at least one body");
         }
+        if self
+            .playback
+            .is_some_and(|rate| rate.is_nan() || rate <= 0.0)
+        {
+            return err("playback must be positive");
+        }
         let mut world = World::new(v(self.world.gravity));
         let mut ids: HashMap<&str, BodyId> = HashMap::new();
         let mut labels = Vec::new();
@@ -638,6 +670,16 @@ impl SceneFile {
                 } => world.add_force(
                     Driving::new(lookup(body)?, v(*amplitude), *angular_frequency).phase(*phase),
                 ),
+                ForceSpec::Gravitation { constant, fixed } => {
+                    let mut gravitation = Gravitation::new(*constant);
+                    for source in fixed {
+                        if source.mass.is_nan() || source.mass <= 0.0 {
+                            return err("gravitation: a fixed mass must be positive");
+                        }
+                        gravitation = gravitation.source(v(source.at), source.mass);
+                    }
+                    world.add_force(gravitation);
+                }
             }
         }
 
@@ -777,6 +819,7 @@ impl SceneFile {
                 .collect(),
             view,
             finish,
+            playback: self.playback.unwrap_or(1.0),
         };
         Ok((scene, explicit))
     }

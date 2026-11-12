@@ -31,7 +31,7 @@ pub use energy::EnergyLedger;
 pub use event::{Event, EventKind};
 pub use finish::{Finish, Finished, Trigger};
 pub use force::{
-    Anchor, Applied, Driving, Force, ForceLabel, ForceSample, Grab, LinearDrag, Loads,
+    Anchor, Applied, Driving, Force, ForceLabel, ForceSample, Grab, Gravitation, LinearDrag, Loads,
     QuadraticDrag, Spring, Torque,
 };
 pub use integrator::{Integrator, Verlet};
