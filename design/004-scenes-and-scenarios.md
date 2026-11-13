@@ -171,14 +171,15 @@ Ordered by the NCERT chapters. Each row is a scene builder with parameters, an e
 | damped oscillator | `m, k, b` | envelope `e^{−bt/2m}`, damped frequency |
 | driven oscillator and resonance (Phase 2) | `m, k, b, F₀, ω_d` | amplitude vs `ω_d` |
 
-## Catalogue, class 12 (on hold until requested)
+## Catalogue, class 12
 
-| Scenario | Parameters | Exact |
-| --- | --- | --- |
-| charged particle in a uniform electric field | `q, m, E, u` | parabolic deflection |
-| charged particle in a uniform magnetic field | `q, m, B, u` | radius `m v / q B`, cyclotron period |
-| velocity selector | `E, B` | undeflected speed `E / B` |
-| two charges (Coulomb) | `q₁, q₂, m` | trajectories, energy |
+Charges in electric and magnetic fields: eleven scenarios, listed with their exact answers in
+[011](011-electromagnetism.md). A scene gives a body a `charge` and adds `electrostatics`, `electric_field` or
+`magnetic_field` to its forces.
+
+Gauss's law, fixed charge, magnets and matter: eight more, in [012](012-magnetism-and-matter.md). `electrostatics`
+takes `fixed` wires, sheets and shells; a body takes a `magnet` or is `magnetisable`, with `magnetostatics` among
+the forces; a scene may name a closed `surface` to total the flux through.
 
 ## Validation policy for the catalogue
 

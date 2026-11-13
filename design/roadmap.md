@@ -25,8 +25,13 @@ Exit: every row in the catalogue table passes its closed-form test; three teache
 - ~~Damped, driven and coupled oscillators~~ done (009); a resonance curve as a graph remains
 - ~~Event timing by interpolation so reported impact and landing times are accurate to second order~~ done
 
-Held until a teacher asks for it: charged particles in uniform electric and magnetic fields (class 12). The force
-generators are cheap, so this can be pulled forward at any time.
+- ~~Charges in electric and magnetic fields (class 12)~~ done (011), asked for by a professor: Coulomb's law,
+  uniform fields, field lines, eleven scenarios
+- ~~Gauss's law, fixed wires, sheets and shells of charge; bar magnets and magnetic materials~~ done (012), eight
+  more scenarios. Electromagnetic waves are drawn from their formulas in the playground
+
+Class 12 still to come, none of it mechanics: capacitors, circuits, the fields of currents, induction and
+alternating current, optics (see the end of 011).
 
 ## Phase 3: Waves and the fields pillar, continued
 

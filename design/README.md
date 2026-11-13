@@ -30,3 +30,5 @@ A document states the physics, the numerical method, the public API, and how the
 | [008](008-interaction.md) | A hand on the physics: grabbing, picking, snapshots | Implemented |
 | [009](009-gravitation-and-oscillators.md) | Newtonian gravitation, orbits, damped and driven oscillators | Implemented |
 | [010](010-class-11-catalogue.md) | The rest of the class 11 catalogue; a free-ended spring; what counts as an impact | Implemented |
+| [011](011-electromagnetism.md) | Charges and fields for class 12: Coulomb's law, uniform electric and magnetic fields | Implemented |
+| [012](012-magnetism-and-matter.md) | Gauss's law and fixed spreads of charge; bar magnets, the earth's field, magnetic materials | Implemented |

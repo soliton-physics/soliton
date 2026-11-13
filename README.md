@@ -102,7 +102,8 @@ repository holds no registry credentials.
 
 The engine is designed in the open. [`design/`](design/) holds the architecture, conventions, the phased roadmap, and one
 design document per subsystem. Phase 1 is planar mechanics for the NCERT class 11 syllabus: bodies, forces, constraints,
-ropes and pulleys, contact with Coulomb friction, all validated against textbook answers. The wave solvers above are the
+ropes and pulleys, contact with Coulomb friction, all validated against textbook answers. Class 12 so far has
+charges in electric and magnetic fields, Gauss's law, and bar magnets with magnetic materials. The wave solvers above are the
 first piece of the fields pillar and continue after that.
 
 ## License
