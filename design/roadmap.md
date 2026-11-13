@@ -30,8 +30,10 @@ Exit: every row in the catalogue table passes its closed-form test; three teache
 - ~~Gauss's law, fixed wires, sheets and shells of charge; bar magnets and magnetic materials~~ done (012), eight
   more scenarios. Electromagnetic waves are drawn from their formulas in the playground
 
-Class 12 still to come, none of it mechanics: capacitors, circuits, the fields of currents, induction and
-alternating current, optics (see the end of 011).
+- ~~Ray optics (class 12)~~ done (013), in a crate of its own, `soliton-optics`: fifteen scenarios
+
+Class 12 still to come: capacitors, circuits, the fields of currents, induction and alternating current
+(see the end of 011), and wave optics.
 
 ## Phase 3: Waves and the fields pillar, continued
 
