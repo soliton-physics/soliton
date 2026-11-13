@@ -4,6 +4,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 mod mechanics;
+mod optics;
 
 use soliton_fields::{exact, Kdv, Nls, PeriodicGrid, Simulate};
 
@@ -153,5 +154,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<mechanics::Scene>()?;
     m.add_class::<mechanics::Run>()?;
     m.add_function(wrap_pyfunction!(mechanics::catalogue_json, m)?)?;
+    m.add_class::<optics::Bench>()?;
+    m.add_function(wrap_pyfunction!(optics::optics_catalogue_json, m)?)?;
     Ok(())
 }
