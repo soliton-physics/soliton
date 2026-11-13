@@ -1,3 +1,4 @@
+use crate::magnetism::Magnet;
 use crate::shape::{Circle, Polygon, Shape};
 use soliton_core::Vec2;
 
@@ -9,7 +10,7 @@ impl BodyId {
         self.0 as usize
     }
 
-    pub fn from_index(index: usize) -> Self {
+    pub const fn from_index(index: usize) -> Self {
         Self(index as u32)
     }
 }
@@ -54,6 +55,13 @@ pub struct Body {
     pub velocity: Vec2,
     pub angular_velocity: f64,
     pub material: Material,
+    /// Electric charge, C, taken to sit at the centre of the body.
+    pub charge: f64,
+    /// Makes the body a bar magnet lying along its own x axis.
+    pub magnet: Option<Magnet>,
+    /// Magnetic moment the body takes on per tesla of field it sits in, A·m²/T: positive for a paramagnet,
+    /// negative for a diamagnet.
+    pub polarisability: f64,
 }
 
 impl Body {
@@ -95,6 +103,9 @@ impl Body {
             velocity: Vec2::ZERO,
             angular_velocity: 0.0,
             material: Material::default(),
+            charge: 0.0,
+            magnet: None,
+            polarisability: 0.0,
         }
     }
 
@@ -138,6 +149,21 @@ impl Body {
         self.material.restitution = restitution;
         self
     }
+
+    pub fn charge(mut self, charge: f64) -> Self {
+        self.charge = charge;
+        self
+    }
+
+    pub fn magnet(mut self, magnet: Magnet) -> Self {
+        self.magnet = Some(magnet);
+        self
+    }
+
+    pub fn polarisability(mut self, polarisability: f64) -> Self {
+        self.polarisability = polarisability;
+        self
+    }
 }
 
 /// Structure-of-arrays storage for every body in a world.
@@ -150,6 +176,9 @@ pub struct Bodies {
     pub(crate) inverse_inertias: Vec<f64>,
     pub(crate) shapes: Vec<Shape>,
     pub(crate) materials: Vec<Material>,
+    pub(crate) charges: Vec<f64>,
+    pub(crate) magnets: Vec<Option<Magnet>>,
+    pub(crate) polarisabilities: Vec<f64>,
     pub(crate) positions: Vec<Vec2>,
     pub(crate) angles: Vec<f64>,
     pub(crate) velocities: Vec<Vec2>,
@@ -174,6 +203,9 @@ impl Bodies {
         });
         self.shapes.push(body.shape);
         self.materials.push(body.material);
+        self.charges.push(body.charge);
+        self.magnets.push(body.magnet);
+        self.polarisabilities.push(body.polarisability);
         self.positions.push(body.position);
         self.angles.push(body.angle);
         self.velocities.push(body.velocity);
@@ -215,6 +247,18 @@ impl Bodies {
 
     pub fn material(&self, id: BodyId) -> Material {
         self.materials[id.index()]
+    }
+
+    pub fn charge(&self, id: BodyId) -> f64 {
+        self.charges[id.index()]
+    }
+
+    pub fn magnet(&self, id: BodyId) -> Option<Magnet> {
+        self.magnets[id.index()]
+    }
+
+    pub fn polarisability(&self, id: BodyId) -> f64 {
+        self.polarisabilities[id.index()]
     }
 
     pub fn position(&self, id: BodyId) -> Vec2 {

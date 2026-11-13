@@ -1,5 +1,6 @@
 use crate::body::{Bodies, BodyId};
 use crate::constraint::Sketch;
+use crate::electromagnetism::{Distribution, FieldInfo};
 use soliton_core::Vec2;
 
 /// What a force is, for the free-body diagram and the energy ledger.
@@ -15,6 +16,14 @@ pub enum ForceLabel {
     Normal,
     Friction,
     Reaction,
+    /// From charges, or from a steady uniform field that fills the plane: it has a potential.
+    Electric,
+    /// From a field held between plates or made to alternate: the supply behind it does the work.
+    ElectricSupply,
+    /// On a moving charge: always across the motion, so it does no work.
+    Magnetic,
+    /// Between the poles of magnets, and on matter a magnet magnetises: it has a potential.
+    Magnetostatic,
 }
 
 /// How a force enters the energy ledger.
@@ -31,6 +40,23 @@ pub enum WorkClass {
 }
 
 impl ForceLabel {
+    pub const ALL: [Self; 14] = [
+        Self::Gravity,
+        Self::Applied,
+        Self::Torque,
+        Self::Spring,
+        Self::Drag,
+        Self::Driving,
+        Self::Tension,
+        Self::Normal,
+        Self::Friction,
+        Self::Reaction,
+        Self::Electric,
+        Self::ElectricSupply,
+        Self::Magnetic,
+        Self::Magnetostatic,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Gravity => "gravity",
@@ -43,15 +69,23 @@ impl ForceLabel {
             Self::Normal => "normal",
             Self::Friction => "friction",
             Self::Reaction => "reaction",
+            Self::Electric | Self::ElectricSupply => "electric",
+            Self::Magnetic | Self::Magnetostatic => "magnetic",
         }
     }
 
     pub fn work_class(self) -> WorkClass {
         match self {
-            Self::Gravity | Self::Spring => WorkClass::Conservative,
+            Self::Gravity | Self::Spring | Self::Electric | Self::Magnetostatic => {
+                WorkClass::Conservative
+            }
             Self::Drag | Self::Friction => WorkClass::Dissipative,
-            Self::Applied | Self::Torque | Self::Driving => WorkClass::External,
-            Self::Tension | Self::Normal | Self::Reaction => WorkClass::Reaction,
+            Self::Applied | Self::Torque | Self::Driving | Self::ElectricSupply => {
+                WorkClass::External
+            }
+            // The magnetic force on a charge is always at right angles to its velocity: like a reaction, it
+            // does no work.
+            Self::Tension | Self::Normal | Self::Reaction | Self::Magnetic => WorkClass::Reaction,
         }
     }
 }
@@ -224,6 +258,47 @@ pub trait Force {
 
     fn sketches(&self, _bodies: &Bodies) -> Vec<Sketch> {
         Vec::new()
+    }
+
+    /// The electric field this force stands for at a point, N/C; zero for anything that is not one.
+    fn electric_field(&self, _bodies: &Bodies, _point: Vec2, _time: f64) -> Vec2 {
+        Vec2::ZERO
+    }
+
+    /// The electric potential at a point, V, when the field has one.
+    fn electric_potential(&self, _bodies: &Bodies, _point: Vec2) -> Option<f64> {
+        None
+    }
+
+    /// The magnetic field out of the page at a point, T.
+    fn magnetic_field(&self, _point: Vec2) -> f64 {
+        0.0
+    }
+
+    /// The magnetic field in the plane of the page at a point, T: that of bar magnets and of the earth, leaving
+    /// out any magnet on the body `skip`.
+    fn magnetic_field_in_plane(
+        &self,
+        _bodies: &Bodies,
+        _point: Vec2,
+        _skip: Option<BodyId>,
+    ) -> Vec2 {
+        Vec2::ZERO
+    }
+
+    /// The electric flux out of a sphere centred in the plane, N·m²/C.
+    fn flux_through_sphere(&self, _bodies: &Bodies, _centre: Vec2, _radius: f64) -> f64 {
+        0.0
+    }
+
+    /// A uniform field to draw.
+    fn field(&self, _time: f64) -> Option<FieldInfo> {
+        None
+    }
+
+    /// Fixed wires, sheets and shells of charge to draw.
+    fn distributions(&self) -> &[Distribution] {
+        &[]
     }
 }
 

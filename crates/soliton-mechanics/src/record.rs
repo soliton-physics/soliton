@@ -81,6 +81,25 @@ impl Recorder {
         out
     }
 
+    /// The same by the name a force goes by in a free-body diagram, which may cover more than one label:
+    /// `electric` is the force from charges and from fields alike. `None` for a name no force has.
+    pub fn force_named(&self, id: BodyId, name: &str) -> Option<Vec<Vec2>> {
+        let labels: Vec<ForceLabel> = ForceLabel::ALL
+            .into_iter()
+            .filter(|l| l.as_str() == name)
+            .collect();
+        if labels.is_empty() {
+            return None;
+        }
+        let mut out = vec![Vec2::ZERO; self.samples()];
+        for label in labels {
+            for (sum, force) in out.iter_mut().zip(self.force(id, label)) {
+                *sum += force;
+            }
+        }
+        Some(out)
+    }
+
     pub fn observe(&mut self, sim: &Simulation) {
         let world = sim.world();
         let bodies = world.bodies();

@@ -12,6 +12,8 @@ use crate::world::World;
 use serde::{Deserialize, Serialize};
 use soliton_core::Vec2;
 
+mod class12;
+
 const G: f64 = 9.8;
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -2093,6 +2095,23 @@ const fn spec(
     }
 }
 
+/// The same for class 12.
+#[allow(clippy::too_many_arguments)]
+const fn spec12(
+    id: &'static str,
+    title: &'static str,
+    description: &'static str,
+    chapter: &'static str,
+    topic: &'static str,
+    params: &'static [Param],
+    dt: f64,
+    duration: f64,
+) -> ScenarioSpec {
+    let mut out = spec(id, title, description, chapter, topic, params, dt, duration);
+    out.syllabus.class = 12;
+    out
+}
+
 static CATALOGUE: &[Scenario] = &[
     Scenario {
         spec: spec("free-fall", "Free fall", "A ball dropped from rest. Watch the v–t graph: a straight line whose slope is g.", "Motion in a straight line", "uniform acceleration", &FREE_FALL, 1e-3, 4.0),
@@ -2233,5 +2252,81 @@ static CATALOGUE: &[Scenario] = &[
     Scenario {
         spec: spec("coupled-oscillators", "Coupled oscillators", "Two blocks joined by a weak spring. Start one and its motion drains into the other and comes back. Start them together, or exactly against each other, and it never does.", "Oscillations", "normal modes and beats", &COUPLED, 1e-3, 16.0),
         describe: coupled_oscillators,
+    },
+    Scenario {
+        spec: spec12("coulomb-force", "Force between two charges", "Like charges push each other apart, hardest when they are closest. Halve the distance and the force is four times as large.", "Electric charges and fields", "Coulomb's law", &class12::COULOMB_FORCE, 1e-3, 2.0),
+        describe: class12::coulomb_force,
+    },
+    Scenario {
+        spec: spec12("field-of-two-charges", "Field of two charges", "Field lines leave positive charge and end on negative. A small test charge feels a force along the line through it. Move it about and read the field and the potential.", "Electric charges and fields", "electric field and field lines", &class12::TWO_CHARGES, 2e-3, 10.0),
+        describe: class12::field_of_two_charges,
+    },
+    Scenario {
+        spec: spec12("charged-pendulum", "Charged bob in an electric field", "A sideways field pulls the bob off the vertical. It would hang at rest where the thread lines up with weight and electric force together; let go from below, it swings to twice that angle.", "Electric charges and fields", "force on a charge in a field", &class12::CHARGED_PENDULUM, 1e-3, 6.0),
+        describe: class12::charged_pendulum,
+    },
+    Scenario {
+        spec: spec12("charge-between-plates", "A charge fired between plates", "Between the plates the charge is pushed sideways at a steady rate, so its path is a parabola, like a ball thrown level. Beyond them it goes straight.", "Electric charges and fields", "motion in a uniform field", &class12::PLATES, 2.5e-4, 2.0),
+        describe: class12::charge_between_plates,
+    },
+    Scenario {
+        spec: spec12("balanced-drop", "Balancing a charged drop", "An upward field can hold a charged drop against its weight. Find the field at which it hangs still: that is how the charge on a drop is measured.", "Electric charges and fields", "force on a charge in a field", &class12::DROP, 1e-3, 2.0),
+        describe: class12::balanced_drop,
+    },
+    Scenario {
+        spec: spec12("dipole-in-field", "A dipole in a uniform field", "Equal and opposite charges on a rod. The field pushes the two ends in opposite directions: no net force, only a twist that swings the rod into line with the field.", "Electric charges and fields", "electric dipole", &class12::DIPOLE, 1e-3, 6.0),
+        describe: class12::dipole_in_field,
+    },
+    Scenario {
+        spec: spec12("gauss-law", "Gauss's law", "Draw a closed surface and add up the field coming out of it all the way round. The total depends only on the charge inside: a charge outside sends as much field in as it takes out. Drag the surface over the charges.", "Electric charges and fields", "electric flux and Gauss's law", &class12::GAUSS, 2e-3, 10.0),
+        describe: class12::gauss_law,
+    },
+    Scenario {
+        spec: spec12("charged-wire", "Circling a charged wire", "A long charged wire, seen end on. Its field falls off as 1/r, not 1/r², and that has an odd result: the speed that keeps an opposite charge in a circle is the same at every distance.", "Electric charges and fields", "field of a line of charge", &class12::WIRE, 1e-3, 6.0),
+        describe: class12::charged_wire,
+    },
+    Scenario {
+        spec: spec12("charged-sheet", "Beside a charged sheet", "A large flat sheet of charge, seen edge on. Its field is the same however far away you stand, so the bead is pushed at a steady rate from anywhere. Give the bead the opposite charge and it is pulled through a hole in the sheet, to and fro.", "Electric charges and fields", "field of a sheet of charge", &class12::SHEET, 1e-3, 2.0),
+        describe: class12::charged_sheet,
+    },
+    Scenario {
+        spec: spec12("charged-shell", "Inside a charged shell", "A hollow charged sphere pushes on nothing inside it: the bead crosses at a steady speed in a straight line. Once out through a small hole, it is pushed away as if all the charge sat at the centre.", "Electric charges and fields", "field of a charged shell", &class12::SHELL, 1e-3, 3.0),
+        describe: class12::charged_shell,
+    },
+    Scenario {
+        spec: spec12("closest-approach", "Closest approach to a fixed charge", "Fired straight at a like charge, it slows as its kinetic energy turns into potential energy, stops for an instant, and is thrown back.", "Electrostatic potential and capacitance", "potential energy of two charges", &class12::APPROACH, 5e-4, 2.0),
+        describe: class12::closest_approach,
+    },
+    Scenario {
+        spec: spec12("accelerating-voltage", "Speeding up through a potential difference", "A charge that falls through a potential difference V gains kinetic energy qV, however far apart the plates are.", "Electrostatic potential and capacitance", "potential difference", &class12::VOLTAGE, 2.5e-4, 2.0),
+        describe: class12::accelerating_voltage,
+    },
+    Scenario {
+        spec: spec12("charge-in-magnetic-field", "A charge in a magnetic field", "The magnetic force is always at right angles to the motion, so it turns the charge without ever speeding it up: a circle. A faster charge makes a bigger circle in the same time.", "Moving charges and magnetism", "motion in a magnetic field", &class12::CIRCLE, 1e-3, 7.0),
+        describe: class12::charge_in_magnetic_field,
+    },
+    Scenario {
+        spec: spec12("velocity-selector", "Velocity selector", "Crossed electric and magnetic fields push a charge opposite ways. Only at one speed, E/B, do the two cancel and the charge go straight through.", "Moving charges and magnetism", "crossed fields", &class12::SELECTOR, 2.5e-4, 2.0),
+        describe: class12::velocity_selector,
+    },
+    Scenario {
+        spec: spec12("cyclotron", "Cyclotron", "A magnetic field brings the charge back to the gap twice a turn, always after the same time whatever its speed, so a voltage alternating in step speeds it up at every crossing.", "Moving charges and magnetism", "cyclotron", &class12::CYCLOTRON, 1e-3, 40.0),
+        describe: class12::cyclotron,
+    },
+    Scenario {
+        spec: spec12("bar-magnet-field", "Field of a bar magnet", "Lines of the field leave the north pole and come round to the south. A compass needle lines up along them. Carry the compass round the magnet: along the axis the field is twice what it is at the same distance beside the middle.", "Magnetism and matter", "the bar magnet", &class12::BAR_MAGNET, 2e-3, 10.0),
+        describe: class12::bar_magnet_field,
+    },
+    Scenario {
+        spec: spec12("compass-needle", "A compass needle set swinging", "Turned away from the field and let go, the needle is twisted back, overshoots and swings. A stronger field or a stronger needle swings faster; timing the swings is how a field is measured.", "Magnetism and matter", "a magnet in a uniform field", &class12::NEEDLE, 1e-3, 8.0),
+        describe: class12::compass_needle,
+    },
+    Scenario {
+        spec: spec12("neutral-point", "A bar magnet in the earth's field", "The magnet's field adds to the earth's. At two points the two are equal and opposite and a compass there has nothing to steer it. Hunt for them with the compass; turn the magnet round and they move.", "Magnetism and matter", "neutral points", &class12::NEUTRAL, 2e-3, 10.0),
+        describe: class12::neutral_point,
+    },
+    Scenario {
+        spec: spec12("magnetic-materials", "Pushed out or pulled in", "A strong magnet magnetises whatever is near it. Bismuth, copper and water are magnetised against the field and are pushed, very gently, towards where it is weaker. Aluminium is magnetised along it and is pulled in.", "Magnetism and matter", "diamagnetism and paramagnetism", &class12::MATERIALS, 1e-3, 10.0),
+        describe: class12::magnetic_materials,
     },
 ];

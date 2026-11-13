@@ -3,10 +3,14 @@
 
 use crate::body::{Body, BodyId};
 use crate::constraint::{FixedAngle, PinJoint, Rod, Slot};
+use crate::electromagnetism::{
+    Distribution, ElectricField, Electrostatics, MagneticField, Region, COULOMB,
+};
 use crate::finish::{Finish, Trigger};
 use crate::force::{
     Anchor, Applied, Driving, Gravitation, LinearDrag, QuadraticDrag, Spring, Torque,
 };
+use crate::magnetism::{sphere_polarisability, Magnet, Magnetostatics, MAGNETIC};
 use crate::rope::{Rope, RopeNode, Wrap};
 use crate::scenario::{Scene, View};
 use crate::shape::{Circle, HalfPlane, Polygon, Shape};
@@ -65,6 +69,16 @@ pub struct SceneFile {
     /// too slow: an orbit takes ninety minutes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playback: Option<f64>,
+    /// A closed surface to total the electric flux through: a sphere, drawn as its circle in the page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<SurfaceSpec>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SurfaceSpec {
+    pub centre: [f64; 2],
+    pub radius: f64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -172,6 +186,33 @@ pub struct BodySpec {
     pub restitution: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inertia: Option<f64>,
+    /// Electric charge in coulombs, at the body's centre.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub charge: f64,
+    /// Makes the body a bar magnet along its own x axis.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub magnet: Option<MagnetSpec>,
+    /// Makes the body a small sphere of a material that a magnetic field magnetises.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub magnetisable: Option<MagnetisableSpec>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MagnetSpec {
+    /// Magnetic moment, A·m², from the south pole to the north along the body's x axis.
+    pub moment: f64,
+    /// Distance between the poles, m: a little less than the length of the magnet.
+    pub length: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MagnetisableSpec {
+    /// `χ`: about `−1.7 × 10⁻⁴` for bismuth, `+2.2 × 10⁻⁵` for aluminium, `−1` for a superconductor.
+    pub susceptibility: f64,
+    /// Volume of the sample, m³.
+    pub volume: f64,
 }
 
 fn is_zero(v: &f64) -> bool {
@@ -212,7 +253,28 @@ impl BodySpec {
             friction: None,
             restitution: None,
             inertia: None,
+            charge: 0.0,
+            magnet: None,
+            magnetisable: None,
         }
+    }
+
+    pub fn magnet(mut self, moment: f64, length: f64) -> Self {
+        self.magnet = Some(MagnetSpec { moment, length });
+        self
+    }
+
+    pub fn magnetisable(mut self, susceptibility: f64, volume: f64) -> Self {
+        self.magnetisable = Some(MagnetisableSpec {
+            susceptibility,
+            volume,
+        });
+        self
+    }
+
+    pub fn charge(mut self, charge: f64) -> Self {
+        self.charge = charge;
+        self
     }
 
     pub fn mass(mut self, mass: f64) -> Self {
@@ -332,6 +394,131 @@ pub enum ForceSpec {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         fixed: Vec<SourceSpec>,
     },
+    /// Coulomb's law between every pair of charged bodies; a charged static body is a fixed charge.
+    Electrostatics {
+        /// `1/4πε₀`; the SI value unless given.
+        #[serde(default = "coulomb", skip_serializing_if = "is_coulomb")]
+        constant: f64,
+        /// Fixed wires, sheets and shells of charge.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        fixed: Vec<DistributionSpec>,
+    },
+    /// Bar magnets acting on one another and on magnetisable bodies, in a uniform background field, T.
+    Magnetostatics {
+        /// `μ₀/4π`; the SI value unless given.
+        #[serde(default = "magnetic", skip_serializing_if = "is_magnetic")]
+        constant: f64,
+        #[serde(default, skip_serializing_if = "is_zero2")]
+        background: [f64; 2],
+    },
+    /// A uniform electric field in N/C, everywhere or inside `region`, steady or alternating as `cos(ωt + φ)`.
+    ElectricField {
+        field: [f64; 2],
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        region: Option<RegionSpec>,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        angular_frequency: f64,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        phase: f64,
+    },
+    /// A uniform magnetic field in tesla, perpendicular to the plane and positive out of the page.
+    MagneticField {
+        strength: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        region: Option<RegionSpec>,
+    },
+}
+
+fn coulomb() -> f64 {
+    COULOMB
+}
+
+fn magnetic() -> f64 {
+    MAGNETIC
+}
+
+fn is_magnetic(v: &f64) -> bool {
+    *v == MAGNETIC
+}
+
+/// A fixed spread of charge: see [`Distribution`].
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DistributionSpec {
+    /// A long wire through the page, C/m.
+    Wire { at: [f64; 2], density: f64 },
+    /// A large sheet seen edge on, C/m².
+    Sheet {
+        point: [f64; 2],
+        normal: [f64; 2],
+        density: f64,
+    },
+    /// A thin spherical shell, C.
+    Shell {
+        centre: [f64; 2],
+        radius: f64,
+        charge: f64,
+    },
+}
+
+impl DistributionSpec {
+    fn build(&self) -> Result<Distribution, SceneError> {
+        Ok(match *self {
+            Self::Wire { at, density } => Distribution::Wire { at: v(at), density },
+            Self::Sheet {
+                point,
+                normal,
+                density,
+            } => {
+                let normal = v(normal).normalized();
+                if normal == Vec2::ZERO {
+                    return err("electrostatics: a sheet needs a direction to face");
+                }
+                Distribution::Sheet {
+                    point: v(point),
+                    normal,
+                    density,
+                }
+            }
+            Self::Shell {
+                centre,
+                radius,
+                charge,
+            } => {
+                if radius.is_nan() || radius <= 0.0 {
+                    return err("electrostatics: a shell's radius must be positive");
+                }
+                Distribution::Shell {
+                    centre: v(centre),
+                    radius,
+                    charge,
+                }
+            }
+        })
+    }
+}
+
+fn is_coulomb(v: &f64) -> bool {
+    *v == COULOMB
+}
+
+/// The rectangle a field is confined to, by two opposite corners.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RegionSpec {
+    pub min: [f64; 2],
+    pub max: [f64; 2],
+}
+
+impl RegionSpec {
+    fn build(&self, what: &str) -> Result<Region, SceneError> {
+        if self.min[0] >= self.max[0] || self.min[1] >= self.max[1] {
+            return err(format!(
+                "{what}: a region's `min` must be below and left of its `max`"
+            ));
+        }
+        Ok(Region::new(v(self.min), v(self.max)))
+    }
 }
 
 /// A mass at a point that attracts but is not moved.
@@ -433,6 +620,7 @@ impl SceneFile {
             view: None,
             finish: Vec::new(),
             playback: None,
+            surface: None,
         }
     }
 
@@ -504,6 +692,11 @@ impl SceneFile {
         self
     }
 
+    pub fn surface(mut self, centre: [f64; 2], radius: f64) -> Self {
+        self.surface = Some(SurfaceSpec { centre, radius });
+        self
+    }
+
     pub fn finish(mut self, rule: FinishSpec) -> Self {
         self.finish.push(rule);
         self
@@ -571,6 +764,14 @@ impl SceneFile {
                 *phase += *angular_frequency * time;
                 true
             }
+            ForceSpec::ElectricField {
+                angular_frequency,
+                phase,
+                ..
+            } => {
+                *phase += *angular_frequency * time;
+                true
+            }
             _ => true,
         });
         file.finish.retain_mut(|rule| match &mut rule.when {
@@ -600,6 +801,12 @@ impl SceneFile {
             .is_some_and(|rate| rate.is_nan() || rate <= 0.0)
         {
             return err("playback must be positive");
+        }
+        if self
+            .surface
+            .is_some_and(|s| s.radius.is_nan() || s.radius <= 0.0)
+        {
+            return err("surface: the radius must be positive");
         }
         let mut world = World::new(v(self.world.gravity));
         let mut ids: HashMap<&str, BodyId> = HashMap::new();
@@ -692,6 +899,47 @@ impl SceneFile {
                         gravitation = gravitation.source(v(source.at), source.mass);
                     }
                     world.add_force(gravitation);
+                }
+                ForceSpec::Electrostatics { constant, fixed } => {
+                    if constant.is_nan() || *constant <= 0.0 {
+                        return err("electrostatics: the constant must be positive");
+                    }
+                    let mut electric = Electrostatics::new(*constant);
+                    for distribution in fixed {
+                        electric = electric.with(distribution.build()?);
+                    }
+                    world.add_force(electric);
+                }
+                ForceSpec::Magnetostatics {
+                    constant,
+                    background,
+                } => {
+                    if constant.is_nan() || *constant <= 0.0 {
+                        return err("magnetostatics: the constant must be positive");
+                    }
+                    world.add_force(Magnetostatics::new(*constant).background(v(*background)));
+                }
+                ForceSpec::ElectricField {
+                    field,
+                    region,
+                    angular_frequency,
+                    phase,
+                } => {
+                    let mut electric = ElectricField::uniform(v(*field));
+                    if let Some(region) = region {
+                        electric = electric.within(region.build("electric_field")?);
+                    }
+                    if *angular_frequency != 0.0 {
+                        electric = electric.alternating(*angular_frequency, *phase);
+                    }
+                    world.add_force(electric);
+                }
+                ForceSpec::MagneticField { strength, region } => {
+                    let mut magnetic = MagneticField::uniform(*strength);
+                    if let Some(region) = region {
+                        magnetic = magnetic.within(region.build("magnetic_field")?);
+                    }
+                    world.add_force(magnetic);
                 }
             }
         }
@@ -900,5 +1148,29 @@ fn build_body(spec: &BodySpec) -> Result<Body, SceneError> {
     if let Some(i) = spec.inertia {
         body = body.inertia(i);
     }
-    Ok(body)
+    if !spec.charge.is_finite() {
+        return err(format!("body `{}`: charge must be a number", spec.id));
+    }
+    if let Some(magnet) = spec.magnet {
+        if !magnet.moment.is_finite() || magnet.length.is_nan() || magnet.length <= 0.0 {
+            return err(format!(
+                "body `{}`: a magnet needs a moment and a positive distance between its poles",
+                spec.id
+            ));
+        }
+        body = body.magnet(Magnet::new(magnet.moment, magnet.length));
+    }
+    if let Some(sample) = spec.magnetisable {
+        if sample.susceptibility.is_nan() || sample.susceptibility < -1.0 {
+            return err(format!(
+                "body `{}`: no material has a susceptibility below -1",
+                spec.id
+            ));
+        }
+        if sample.volume.is_nan() || sample.volume <= 0.0 {
+            return err(format!("body `{}`: volume must be positive", spec.id));
+        }
+        body = body.polarisability(sphere_polarisability(sample.susceptibility, sample.volume));
+    }
+    Ok(body.charge(spec.charge))
 }

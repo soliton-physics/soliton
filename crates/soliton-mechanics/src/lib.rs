@@ -7,12 +7,14 @@
 mod body;
 mod constraint;
 mod contact;
+mod electromagnetism;
 mod energy;
 mod event;
 pub mod exact;
 mod finish;
 mod force;
 mod integrator;
+mod magnetism;
 mod record;
 mod rope;
 pub mod scenario;
@@ -27,6 +29,10 @@ pub use constraint::{
     Constraint, Entry, FixedAngle, PinJoint, Rod, Row, RowKind, Rows, Sketch, Slot,
 };
 pub use contact::Contact;
+pub use electromagnetism::{
+    field_lines, Distribution, ElectricField, Electrostatics, FieldInfo, FieldKind, MagneticField,
+    Region, Seed, COULOMB,
+};
 pub use energy::EnergyLedger;
 pub use event::{Event, EventKind};
 pub use finish::{Finish, Finished, Trigger};
@@ -35,6 +41,9 @@ pub use force::{
     QuadraticDrag, Spring, Torque,
 };
 pub use integrator::{Integrator, Verlet};
+pub use magnetism::{
+    poles, sphere_polarisability, Magnet, Magnetostatics, Pole, MAGNETIC, PERMEABILITY,
+};
 pub use record::{BodyRecord, Recorder};
 pub use rope::{Rope, RopeNode, Wrap};
 pub use shape::{Circle, HalfPlane, Polygon, Shape};

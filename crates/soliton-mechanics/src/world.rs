@@ -1,10 +1,12 @@
 use crate::body::{Bodies, Body, BodyId};
 use crate::constraint::{Constraint, Sketch};
 use crate::contact::{detect, Contact};
+use crate::electromagnetism::{field_lines, Distribution, FieldInfo, Seed};
 use crate::event::{Event, EventKind};
 use crate::force::{
     Force, ForceSample, Grab, Gravity, Instant, Loads, WorkClass, GRAB_FREQUENCY, GRAB_STEP_LIMIT,
 };
+use crate::magnetism::poles;
 use crate::solver::ConstraintSolver;
 use soliton_core::Vec2;
 
@@ -171,6 +173,164 @@ impl World {
             out.extend(f.sketches(&self.bodies));
         }
         out
+    }
+
+    /// The electric field at a point, N/C: of every charge and every uniform field there.
+    pub fn electric_field(&self, point: Vec2, time: f64) -> Vec2 {
+        self.forces
+            .iter()
+            .map(|f| f.electric_field(&self.bodies, point, time))
+            .fold(Vec2::ZERO, |sum, e| sum + e)
+    }
+
+    /// The electric potential at a point, V, with zero at infinity for charges and at the origin for a uniform
+    /// field. A field held between plates or alternating has no potential and adds nothing here.
+    pub fn electric_potential(&self, point: Vec2) -> f64 {
+        self.forces
+            .iter()
+            .filter_map(|f| f.electric_potential(&self.bodies, point))
+            .sum()
+    }
+
+    /// The magnetic field out of the page at a point, T.
+    pub fn magnetic_field(&self, point: Vec2) -> f64 {
+        self.forces.iter().map(|f| f.magnetic_field(point)).sum()
+    }
+
+    /// The uniform fields in the world, for drawing.
+    pub fn fields(&self, time: f64) -> Vec<FieldInfo> {
+        self.forces.iter().filter_map(|f| f.field(time)).collect()
+    }
+
+    /// The magnetic field in the plane of the page at a point, T: of every bar magnet and of the background.
+    pub fn magnetic_field_in_plane(&self, point: Vec2) -> Vec2 {
+        self.plane_field(point, None)
+    }
+
+    /// The magnetic field in the plane at the centre of a body, T, leaving out the body's own: what a compass
+    /// there is reading.
+    pub fn magnetic_field_on(&self, id: BodyId) -> Vec2 {
+        self.plane_field(self.bodies.position(id), Some(id))
+    }
+
+    fn plane_field(&self, point: Vec2, skip: Option<BodyId>) -> Vec2 {
+        self.forces
+            .iter()
+            .map(|f| f.magnetic_field_in_plane(&self.bodies, point, skip))
+            .fold(Vec2::ZERO, |sum, b| sum + b)
+    }
+
+    /// The electric flux out of a sphere centred in the plane, N·m²/C, summed over its surface. Gauss's law
+    /// says it is the charge inside over ε₀; this is the other side of that equation. Uniform fields pass
+    /// straight through a closed surface and add nothing.
+    pub fn electric_flux(&self, centre: Vec2, radius: f64) -> f64 {
+        self.forces
+            .iter()
+            .map(|f| f.flux_through_sphere(&self.bodies, centre, radius))
+            .sum()
+    }
+
+    /// The fixed wires, sheets and shells of charge in the world, for drawing.
+    pub fn distributions(&self) -> Vec<Distribution> {
+        self.forces
+            .iter()
+            .flat_map(|f| f.distributions().iter().copied())
+            .collect()
+    }
+
+    /// Field lines of the charges in the world (see [`field_lines`]), `per_charge` from the largest. Where there
+    /// is a fixed wire, sheet or shell of charge the lines are those of the fixed charge alone: the field a
+    /// bead moving through it feels, without the bead's own drawn over it.
+    pub fn field_lines(
+        &self,
+        per_charge: usize,
+        centre: Vec2,
+        reach: f64,
+        time: f64,
+    ) -> Vec<Vec<Vec2>> {
+        let fixed = self.distributions();
+        if fixed.is_empty() {
+            let b = &self.bodies;
+            let seeds: Vec<Seed> = b
+                .ids()
+                .filter(|&id| b.charge(id) != 0.0)
+                .map(|id| Seed::point(b.position(id), b.charge(id)))
+                .collect();
+            return field_lines(
+                |p| self.electric_field(p, time),
+                &seeds,
+                per_charge,
+                centre,
+                reach,
+            );
+        }
+        let seeds: Vec<Seed> = fixed
+            .into_iter()
+            .filter_map(|distribution| match distribution {
+                Distribution::Wire { at, density } => Some(Seed::point(at, density)),
+                Distribution::Shell {
+                    centre,
+                    radius,
+                    charge,
+                } => Some(Seed {
+                    at: centre,
+                    strength: charge,
+                    radius,
+                }),
+                // The lines of a sheet are parallel and start all along it; front ends draw them as arrows.
+                Distribution::Sheet { .. } => None,
+            })
+            .collect();
+        let nobody = Bodies::default();
+        let field = |p| {
+            self.forces
+                .iter()
+                .map(|f| f.electric_field(&nobody, p, time))
+                .fold(Vec2::ZERO, |sum, e| sum + e)
+        };
+        field_lines(field, &seeds, per_charge, centre, reach)
+    }
+
+    /// The magnetic field in the plane, T, of the fixed magnets and the background alone: the field a compass
+    /// is put into, without the compass's own.
+    pub fn fixed_magnetic_field(&self, point: Vec2) -> Vec2 {
+        let fixed = self.fixed_magnets();
+        self.forces
+            .iter()
+            .map(|f| f.magnetic_field_in_plane(&fixed, point, None))
+            .fold(Vec2::ZERO, |sum, b| sum + b)
+    }
+
+    /// The bodies with every magnet that can move taken off them.
+    fn fixed_magnets(&self) -> Bodies {
+        let mut fixed = self.bodies.clone();
+        for id in self.bodies.ids().filter(|&id| self.bodies.is_dynamic(id)) {
+            fixed.magnets[id.index()] = None;
+        }
+        fixed
+    }
+
+    /// Lines of the magnetic field of the fixed magnets in the plane, from the north poles round to the south,
+    /// `per_pole` from the strongest. Inside a magnet they are not the true field, which runs the other way
+    /// there.
+    pub fn magnetic_field_lines(
+        &self,
+        per_pole: usize,
+        centre: Vec2,
+        reach: f64,
+    ) -> Vec<Vec<Vec2>> {
+        let fixed = self.fixed_magnets();
+        let seeds: Vec<Seed> = poles(&fixed)
+            .into_iter()
+            .map(|p| Seed::point(p.at, p.strength))
+            .collect();
+        let field = |p| {
+            self.forces
+                .iter()
+                .map(|f| f.magnetic_field_in_plane(&fixed, p, None))
+                .fold(Vec2::ZERO, |sum, b| sum + b)
+        };
+        field_lines(field, &seeds, per_pole, centre, reach)
     }
 
     pub(crate) fn has_velocity_forces(&self) -> bool {
