@@ -3,8 +3,8 @@ use serde::Serialize;
 use soliton_mechanics::scenario::{catalogue, find, Params, Scene};
 use soliton_mechanics::scene::SceneFile;
 use soliton_mechanics::{
-    BodyId, BodyKind, Finished, ForceLabel, Recorder, Shape, Simulate, Simulation, Sketch, Trigger,
-    Vec2,
+    BodyId, BodyKind, Distribution, FieldKind, Finished, Recorder, Shape, Simulate, Simulation,
+    Sketch, Trigger, Vec2,
 };
 use wasm_bindgen::prelude::*;
 
@@ -36,7 +36,34 @@ struct BodyInfo {
     label: String,
     kind: &'static str,
     mass: f64,
+    /// Electric charge in coulombs; zero for a body with none.
+    charge: f64,
+    /// `[moment, length]` of a bar magnet, A·m² and m, north towards the body's x axis; `null` for anything else.
+    magnet: Option<[f64; 2]>,
+    /// Moment taken on per tesla, A·m²/T: positive for a paramagnet, negative for a diamagnet, zero for most things.
+    polarisability: f64,
     shape: ShapeInfo,
+}
+
+/// A fixed wire, sheet or shell of charge. `at` is where the wire meets the page, a point on the sheet, or the
+/// centre of the shell; `amount` is C/m, C/m² or C.
+#[derive(Serialize)]
+struct DistributionInfo {
+    kind: &'static str,
+    at: [f64; 2],
+    normal: [f64; 2],
+    radius: f64,
+    amount: f64,
+}
+
+/// A uniform field: electric in N/C as it is at this instant, or magnetic in tesla out of the page.
+#[derive(Serialize)]
+struct FieldInfo {
+    kind: &'static str,
+    electric: [f64; 2],
+    magnetic: f64,
+    /// `[min, max]` corners of the rectangle it is confined to, or `null` when it fills the plane.
+    region: Option<[[f64; 2]; 2]>,
 }
 
 #[derive(Serialize)]
@@ -301,6 +328,9 @@ impl MechanicsWorld {
                     BodyKind::Static => "static",
                 },
                 mass: b.mass(id),
+                charge: b.charge(id),
+                magnet: b.magnet(id).map(|m| [m.moment, m.length]),
+                polarisability: b.polarisability(id),
                 shape: match b.shape(id) {
                     Shape::Circle(c) => ShapeInfo::Circle { radius: c.radius },
                     Shape::Polygon(p) => ShapeInfo::Polygon {
@@ -381,6 +411,139 @@ impl MechanicsWorld {
         to_js(&infos)
     }
 
+    /// The uniform electric and magnetic fields in the scene, for drawing.
+    pub fn fields(&self) -> Result<JsValue, JsError> {
+        let infos: Vec<FieldInfo> = self
+            .sim
+            .world()
+            .fields(self.sim.time())
+            .into_iter()
+            .map(|f| {
+                let (kind, electric, magnetic) = match f.kind {
+                    FieldKind::Electric(e) => ("electric", v(e), 0.0),
+                    FieldKind::Magnetic(b) => ("magnetic", [0.0, 0.0], b),
+                };
+                FieldInfo {
+                    kind,
+                    electric,
+                    magnetic,
+                    region: f.region.map(|r| [v(r.min), v(r.max)]),
+                }
+            })
+            .collect();
+        to_js(&infos)
+    }
+
+    /// `[Ex, Ey, V, Bz, Bx, By]` at a point: electric field in N/C, potential in volts, magnetic field out of
+    /// the page and then in the plane, in tesla. The potential leaves out any field that has none (one held
+    /// between plates, or alternating).
+    pub fn field_at(&self, x: f64, y: f64) -> Float64Array {
+        let world = self.sim.world();
+        let point = Vec2::new(x, y);
+        self.field_values(point, world.magnetic_field_in_plane(point))
+    }
+
+    /// The same at the centre of a body, leaving out the field of the body's own magnet: what a compass or a
+    /// sample placed there is in.
+    pub fn field_on(&self, body: usize) -> Float64Array {
+        let world = self.sim.world();
+        let id = BodyId::from_index(body);
+        self.field_values(world.bodies().position(id), world.magnetic_field_on(id))
+    }
+
+    fn field_values(&self, point: Vec2, in_plane: Vec2) -> Float64Array {
+        let world = self.sim.world();
+        let e = world.electric_field(point, self.sim.time());
+        let values = [
+            e.x,
+            e.y,
+            world.electric_potential(point),
+            world.magnetic_field(point),
+            in_plane.x,
+            in_plane.y,
+        ];
+        Float64Array::from(values.as_slice())
+    }
+
+    /// `[Bx, By]` in tesla at a point, of the fixed magnets and the background alone: the field a compass put
+    /// there would line up with.
+    pub fn fixed_field_at(&self, x: f64, y: f64) -> Float64Array {
+        let b = self.sim.world().fixed_magnetic_field(Vec2::new(x, y));
+        Float64Array::from([b.x, b.y].as_slice())
+    }
+
+    /// The electric flux out of a sphere centred at `(cx, cy)` in the page, N·m²/C, summed over its surface.
+    pub fn flux_through(&self, cx: f64, cy: f64, radius: f64) -> f64 {
+        self.sim.world().electric_flux(Vec2::new(cx, cy), radius)
+    }
+
+    /// The fixed wires, sheets and shells of charge in the scene, for drawing.
+    pub fn distributions(&self) -> Result<JsValue, JsError> {
+        let infos: Vec<DistributionInfo> = self
+            .sim
+            .world()
+            .distributions()
+            .into_iter()
+            .map(|d| match d {
+                Distribution::Wire { at, density } => DistributionInfo {
+                    kind: "wire",
+                    at: v(at),
+                    normal: [0.0, 0.0],
+                    radius: 0.0,
+                    amount: density,
+                },
+                Distribution::Sheet {
+                    point,
+                    normal,
+                    density,
+                } => DistributionInfo {
+                    kind: "sheet",
+                    at: v(point),
+                    normal: v(normal),
+                    radius: 0.0,
+                    amount: density,
+                },
+                Distribution::Shell {
+                    centre,
+                    radius,
+                    charge,
+                } => DistributionInfo {
+                    kind: "shell",
+                    at: v(centre),
+                    normal: [0.0, 0.0],
+                    radius,
+                    amount: charge,
+                },
+            })
+            .collect();
+        to_js(&infos)
+    }
+
+    /// Field lines of the charges, `per_charge` from the largest, followed until they end on a charge or run
+    /// `reach` from `(cx, cy)`. Points as `x, y` pairs, each line closed by a pair of `NaN`s.
+    pub fn field_lines(&self, per_charge: usize, cx: f64, cy: f64, reach: f64) -> Float64Array {
+        flatten(
+            self.sim
+                .world()
+                .field_lines(per_charge, Vec2::new(cx, cy), reach, self.sim.time()),
+        )
+    }
+
+    /// Lines of the magnetic field of the fixed bar magnets, from north poles round to south, in the same form.
+    pub fn magnetic_field_lines(
+        &self,
+        per_pole: usize,
+        cx: f64,
+        cy: f64,
+        reach: f64,
+    ) -> Float64Array {
+        flatten(
+            self.sim
+                .world()
+                .magnetic_field_lines(per_pole, Vec2::new(cx, cy), reach),
+        )
+    }
+
     pub fn exact(&self) -> Result<JsValue, JsError> {
         let infos: Vec<ExactInfo> = self
             .exact
@@ -455,24 +618,10 @@ impl MechanicsWorld {
 
     /// The recorded net force with `label` on one body, as `[fx, fy]` pairs flattened.
     pub fn series_force(&self, body: usize, label: &str) -> Result<Float64Array, JsError> {
-        let label = [
-            ForceLabel::Gravity,
-            ForceLabel::Applied,
-            ForceLabel::Torque,
-            ForceLabel::Spring,
-            ForceLabel::Drag,
-            ForceLabel::Driving,
-            ForceLabel::Tension,
-            ForceLabel::Normal,
-            ForceLabel::Friction,
-            ForceLabel::Reaction,
-        ]
-        .into_iter()
-        .find(|l| l.as_str() == label)
-        .ok_or_else(|| JsError::new(&format!("unknown force label `{label}`")))?;
         let values: Vec<f64> = self
             .recorder
-            .force(BodyId::from_index(body), label)
+            .force_named(BodyId::from_index(body), label)
+            .ok_or_else(|| JsError::new(&format!("unknown force label `{label}`")))?
             .iter()
             .flat_map(|f| [f.x, f.y])
             .collect();
@@ -496,4 +645,14 @@ impl MechanicsWorld {
         };
         Ok(Float64Array::from(values.as_slice()))
     }
+}
+
+/// Lines as `x, y` pairs, each closed by a pair of `NaN`s.
+fn flatten(lines: Vec<Vec<Vec2>>) -> Float64Array {
+    let mut out = Vec::new();
+    for line in lines {
+        out.extend(line.into_iter().flat_map(|p| [p.x, p.y]));
+        out.extend([f64::NAN, f64::NAN]);
+    }
+    Float64Array::from(out.as_slice())
 }

@@ -60,3 +60,41 @@ def test_run_reports_where_the_problem_ends():
     assert run.finished["reason"] in ("ball touched ground", "everything came to rest")
     assert abs(run.finished["time"] - math.sqrt(2 * 20 / 9.8)) < 5e-3
     assert mechanics.scenario("simple-pendulum").run(until=1.0).finished is None
+
+
+def test_a_charge_circles_in_a_magnetic_field_at_constant_speed():
+    scene = mechanics.scenario("charge-in-magnetic-field", speed=3, field=1)
+    answers = scene.answers()
+    run = scene.run(until=answers["Time for one turn (s)"], record_every=1)
+    record = run.body("charge")
+    speed = np.linalg.norm(record["velocity"], axis=1)
+    assert np.allclose(speed, 3.0, rtol=1e-12)
+    radius = np.linalg.norm(record["position"], axis=1)
+    assert np.allclose(radius, answers["Radius of the circle (m)"], rtol=1e-5)
+    force = run.force("charge", "magnetic")
+    assert abs(np.linalg.norm(force[5]) * 1e6 - answers["Magnetic force (μN)"]) < 1e-9
+
+
+def test_field_and_potential_can_be_read_at_a_point():
+    scene = mechanics.scenario("field-of-two-charges", x=2.5, y=1.5)
+    # Midway between equal and opposite charges the field points from the positive one to the negative.
+    ex, ey = scene.electric_field(0.0, -1.0)
+    assert ex > 1e4 and abs(ey) < 1e-3 * ex
+    assert abs(scene.electric_potential(0.0, -1.0)) < 10.0
+    data = json.loads(scene.to_json())
+    assert data["bodies"][0]["charge"] == pytest.approx(4e-6)
+    assert "electrostatics" in data["forces"][0]
+
+
+def test_flux_is_the_charge_inside_over_epsilon():
+    scene = mechanics.scenario("gauss-law")
+    epsilon = 8.8541878128e-12
+    assert abs(scene.electric_flux(-1.0, 0.0, 0.7) - 4e-6 / epsilon) < 1e-3 * 4e-6 / epsilon
+    assert abs(scene.electric_flux(0.0, 1.5, 0.6)) < 1e-3 * 4e-6 / epsilon
+
+
+def test_a_bar_magnet_has_twice_the_field_on_its_axis():
+    scene = mechanics.scenario("bar-magnet-field", x=-30.0, y=-20.0)
+    (axis, _), (beside, _) = scene.magnetic_field(2.0, 0.0), scene.magnetic_field(0.0, 2.0)
+    assert axis > 0 > beside
+    assert abs(axis / -beside - 2.0) < 0.01

@@ -4,7 +4,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use soliton_mechanics::scenario::{catalogue, find, Params};
 use soliton_mechanics::scene::SceneFile;
-use soliton_mechanics::{BodyId, EventKind, ForceLabel, Recorder, Simulate, Simulation};
+use soliton_mechanics::{BodyId, EventKind, Recorder, Simulate, Simulation, Vec2};
 
 /// The scenario catalogue as JSON: ids, titles, syllabus and parameter schemas.
 #[pyfunction]
@@ -54,6 +54,48 @@ impl Scene {
 
     fn to_json(&self) -> String {
         self.file.to_json()
+    }
+
+    /// The electric field `(Ex, Ey)` in N/C at a point of the scene as it starts: of every charge and of
+    /// every uniform field there.
+    fn electric_field(&self, x: f64, y: f64) -> PyResult<(f64, f64)> {
+        let scene = self
+            .file
+            .build()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let e = scene.world.electric_field(Vec2::new(x, y), 0.0);
+        Ok((e.x, e.y))
+    }
+
+    /// The electric potential in volts at a point of the scene as it starts, zero at infinity for charges.
+    /// A field held between plates has no potential and adds nothing.
+    fn electric_potential(&self, x: f64, y: f64) -> PyResult<f64> {
+        let scene = self
+            .file
+            .build()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(scene.world.electric_potential(Vec2::new(x, y)))
+    }
+
+    /// The electric flux in N·m²/C out of a sphere of `radius` centred at a point of the scene, summed over
+    /// its surface. By Gauss's law it is the charge inside over ε₀.
+    fn electric_flux(&self, x: f64, y: f64, radius: f64) -> PyResult<f64> {
+        let scene = self
+            .file
+            .build()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(scene.world.electric_flux(Vec2::new(x, y), radius))
+    }
+
+    /// The magnetic field `(Bx, By)` in tesla in the plane of the page at a point of the scene as it starts:
+    /// of every bar magnet and of the background field.
+    fn magnetic_field(&self, x: f64, y: f64) -> PyResult<(f64, f64)> {
+        let scene = self
+            .file
+            .build()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = scene.world.magnetic_field_in_plane(Vec2::new(x, y));
+        Ok((b.x, b.y))
     }
 
     fn save(&self, path: &str) -> PyResult<()> {
@@ -214,7 +256,7 @@ impl Run {
         Ok(dict)
     }
 
-    /// The net force of one kind (`gravity`, `normal`, `friction`, `tension`, `applied`, `spring`, ...) on a body,
+    /// The net force of one kind (`gravity`, `normal`, `friction`, `tension`, `applied`, `spring`, `electric`, `magnetic`, ...) on a body,
     /// as an `(N, 2)` array.
     fn force<'py>(
         &self,
@@ -222,27 +264,11 @@ impl Run {
         label: &str,
         kind: &str,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-        let force_label = [
-            ForceLabel::Gravity,
-            ForceLabel::Applied,
-            ForceLabel::Torque,
-            ForceLabel::Spring,
-            ForceLabel::Drag,
-            ForceLabel::Driving,
-            ForceLabel::Tension,
-            ForceLabel::Normal,
-            ForceLabel::Friction,
-            ForceLabel::Reaction,
-        ]
-        .into_iter()
-        .find(|l| l.as_str() == kind)
-        .ok_or_else(|| PyValueError::new_err(format!("unknown force kind `{kind}`")))?;
-        pairs(
-            py,
-            self.recorder
-                .force(self.id(label)?, force_label)
-                .into_iter(),
-        )
+        let forces = self
+            .recorder
+            .force_named(self.id(label)?, kind)
+            .ok_or_else(|| PyValueError::new_err(format!("unknown force kind `{kind}`")))?;
+        pairs(py, forces.into_iter())
     }
 
     /// The energy ledger over time: `kinetic`, `potential`, `dissipated`, `external_work`, `conserved`.

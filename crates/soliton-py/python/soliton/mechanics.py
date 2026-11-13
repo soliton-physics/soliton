@@ -8,6 +8,18 @@
     run.t, run.body("m2")["velocity"]    # NumPy arrays
     run.force("m2", "tension")           # (N, 2)
     scene.save("atwood.json")            # the same file the playground loads
+
+Class 12 scenes carry charges and fields (design 011):
+
+    scene = mechanics.scenario("field-of-two-charges")
+    scene.electric_field(0.0, 1.0)       # (Ex, Ey) in N/C
+    scene.electric_potential(0.0, 1.0)   # volts
+
+and bar magnets (design 012):
+
+    scene = mechanics.scenario("bar-magnet-field")
+    scene.magnetic_field(0.2, 0.0)       # (Bx, By) in tesla
+    mechanics.scenario("gauss-law").electric_flux(-1.0, 0.0, 0.7)   # N·m²/C
 """
 
 import json
