@@ -352,11 +352,11 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "soliton-core"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "soliton-fields"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "num-complex",
  "rustfft",
@@ -365,7 +365,16 @@ dependencies = [
 
 [[package]]
 name = "soliton-mechanics"
-version = "0.2.0"
+version = "0.3.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "soliton-core",
+]
+
+[[package]]
+name = "soliton-optics"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -374,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-py"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "num-complex",
  "numpy",
@@ -382,11 +391,12 @@ dependencies = [
  "serde_json",
  "soliton-fields",
  "soliton-mechanics",
+ "soliton-optics",
 ]
 
 [[package]]
 name = "soliton-wasm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "js-sys",
  "num-complex",
@@ -394,6 +404,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "soliton-fields",
  "soliton-mechanics",
+ "soliton-optics",
  "wasm-bindgen",
 ]
 
