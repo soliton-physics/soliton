@@ -1,0 +1,15 @@
+[package]
+name = "soliton-optics"
+description = "Exact ray tracing through mirrors, glass and thin lenses: the Soliton Physics ray optics pillar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["physics", "simulation", "optics", "ray-tracing", "education"]
+categories = ["science", "simulation"]
+
+[dependencies]
+soliton-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
