@@ -34,3 +34,5 @@ A document states the physics, the numerical method, the public API, and how the
 | [012](012-magnetism-and-matter.md) | Gauss's law and fixed spreads of charge; bar magnets, the earth's field, magnetic materials | Implemented |
 | [013](013-ray-optics.md) | Ray optics: exact tracing through mirrors, glass and thin lenses; paraxial images; fifteen scenarios | Implemented |
 | [014](014-thermal.md) | Thermal physics: a gas of hard spheres, pistons, heat baths, staged experiments; nine scenarios | Implemented |
+| [015](015-circuits.md) | Circuits from Kirchhoff's laws: steady, transient and alternating; nineteen scenarios | Implemented |
+| [016](016-statistical-mechanics.md) | Monte Carlo and the Ising model: darts, random walks, Metropolis, a temperature sweep | Implemented |
