@@ -5,6 +5,7 @@ members = [
     "crates/soliton-fields",
     "crates/soliton-mechanics",
     "crates/soliton-optics",
+    "crates/soliton-thermal",
     "crates/soliton-wasm",
     "crates/soliton-py",
 ]
@@ -13,20 +14,22 @@ default-members = [
     "crates/soliton-fields",
     "crates/soliton-mechanics",
     "crates/soliton-optics",
+    "crates/soliton-thermal",
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/soliton-physics/soliton"
 authors = ["Soliton Physics contributors"]
 
 [workspace.dependencies]
-soliton-core = { path = "crates/soliton-core", version = "0.3.0" }
-soliton-fields = { path = "crates/soliton-fields", version = "0.3.0" }
-soliton-mechanics = { path = "crates/soliton-mechanics", version = "0.3.0" }
-soliton-optics = { path = "crates/soliton-optics", version = "0.3.0" }
+soliton-core = { path = "crates/soliton-core", version = "0.4.0" }
+soliton-fields = { path = "crates/soliton-fields", version = "0.4.0" }
+soliton-mechanics = { path = "crates/soliton-mechanics", version = "0.4.0" }
+soliton-optics = { path = "crates/soliton-optics", version = "0.4.0" }
+soliton-thermal = { path = "crates/soliton-thermal", version = "0.4.0" }
 num-complex = "0.4"
 rustfft = "6.4"
 serde = { version = "1.0", features = ["derive"] }
