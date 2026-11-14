@@ -68,12 +68,10 @@ fn an_insulated_gas_keeps_its_energy_exactly() {
     assert_eq!(gas.work, 0.0);
     assert_eq!(gas.heat, [0.0; 6]);
     for m in &gas.molecules {
-        for axis in 0..3 {
-            assert!(
-                m.position[axis] > -0.1 && m.position[axis] < 10.1,
-                "one got out"
-            );
-        }
+        assert!(
+            m.position.iter().all(|x| *x > -0.1 && *x < 10.1),
+            "one got out"
+        );
     }
 }
 
