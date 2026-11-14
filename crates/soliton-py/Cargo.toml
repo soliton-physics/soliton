@@ -17,6 +17,8 @@ soliton-fields = { workspace = true }
 soliton-mechanics = { workspace = true }
 soliton-optics = { workspace = true }
 soliton-thermal = { workspace = true }
+soliton-circuits = { workspace = true }
+soliton-statmech = { workspace = true }
 num-complex = { workspace = true }
 pyo3 = { version = "0.30", features = ["extension-module", "abi3-py310"] }
 numpy = "0.30"

@@ -16,6 +16,8 @@ soliton-fields = { workspace = true }
 soliton-mechanics = { workspace = true }
 soliton-optics = { workspace = true }
 soliton-thermal = { workspace = true }
+soliton-circuits = { workspace = true }
+soliton-statmech = { workspace = true }
 serde = { workspace = true }
 serde-wasm-bindgen = "0.6"
 num-complex = { workspace = true }

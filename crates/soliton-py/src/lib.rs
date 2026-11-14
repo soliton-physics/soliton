@@ -3,8 +3,10 @@ use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+mod circuits;
 mod mechanics;
 mod optics;
+mod statmech;
 mod thermal;
 
 use soliton_fields::{exact, Kdv, Nls, PeriodicGrid, Simulate};
@@ -157,6 +159,12 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mechanics::catalogue_json, m)?)?;
     m.add_class::<optics::Bench>()?;
     m.add_function(wrap_pyfunction!(optics::optics_catalogue_json, m)?)?;
+    m.add_class::<circuits::CircuitBench>()?;
+    m.add_function(wrap_pyfunction!(circuits::circuits_catalogue_json, m)?)?;
+    m.add_class::<statmech::StatRun>()?;
+    m.add_function(wrap_pyfunction!(statmech::statmech_catalogue_json, m)?)?;
+    m.add_function(wrap_pyfunction!(statmech::onsager_magnetisation, m)?)?;
+    m.add_function(wrap_pyfunction!(statmech::onsager_energy, m)?)?;
     m.add_class::<thermal::GasExperiment>()?;
     m.add_function(wrap_pyfunction!(thermal::thermal_catalogue_json, m)?)?;
     Ok(())
