@@ -1,0 +1,15 @@
+[package]
+name = "soliton-circuits"
+description = "Electric circuits solved from Kirchhoff's laws, steady, switching and alternating: the Soliton Physics circuits pillar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["physics", "simulation", "circuits", "electronics", "education"]
+categories = ["science", "simulation"]
+
+[dependencies]
+num-complex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
