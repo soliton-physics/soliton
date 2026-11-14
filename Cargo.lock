@@ -351,12 +351,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "soliton-circuits"
+version = "0.5.0"
+dependencies = [
+ "num-complex",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "soliton-core"
-version = "0.4.0"
+version = "0.5.0"
 
 [[package]]
 name = "soliton-fields"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "num-complex",
  "rustfft",
@@ -365,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-mechanics"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -374,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-optics"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -383,21 +392,32 @@ dependencies = [
 
 [[package]]
 name = "soliton-py"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "num-complex",
  "numpy",
  "pyo3",
  "serde_json",
+ "soliton-circuits",
  "soliton-fields",
  "soliton-mechanics",
  "soliton-optics",
+ "soliton-statmech",
+ "soliton-thermal",
+]
+
+[[package]]
+name = "soliton-statmech"
+version = "0.5.0"
+dependencies = [
+ "serde",
+ "serde_json",
  "soliton-thermal",
 ]
 
 [[package]]
 name = "soliton-thermal"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -405,15 +425,17 @@ dependencies = [
 
 [[package]]
 name = "soliton-wasm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "js-sys",
  "num-complex",
  "serde",
  "serde-wasm-bindgen",
+ "soliton-circuits",
  "soliton-fields",
  "soliton-mechanics",
  "soliton-optics",
+ "soliton-statmech",
  "soliton-thermal",
  "wasm-bindgen",
 ]
