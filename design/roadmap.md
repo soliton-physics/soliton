@@ -31,6 +31,8 @@ Exit: every row in the catalogue table passes its closed-form test; three teache
   more scenarios. Electromagnetic waves are drawn from their formulas in the playground
 
 - ~~Ray optics (class 12)~~ done (013), in a crate of its own, `soliton-optics`: fifteen scenarios
+- ~~Thermodynamics and kinetic theory (class 11)~~ done (014), in `soliton-thermal`: nine scenarios. Asked for
+  by teachers, and the first step towards the statistical physics a university professor asked for
 
 Class 12 still to come: capacitors, circuits, the fields of currents, induction and alternating current
 (see the end of 011), and wave optics.

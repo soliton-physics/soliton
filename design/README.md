@@ -33,3 +33,4 @@ A document states the physics, the numerical method, the public API, and how the
 | [011](011-electromagnetism.md) | Charges and fields for class 12: Coulomb's law, uniform electric and magnetic fields | Implemented |
 | [012](012-magnetism-and-matter.md) | Gauss's law and fixed spreads of charge; bar magnets, the earth's field, magnetic materials | Implemented |
 | [013](013-ray-optics.md) | Ray optics: exact tracing through mirrors, glass and thin lenses; paraxial images; fifteen scenarios | Implemented |
+| [014](014-thermal.md) | Thermal physics: a gas of hard spheres, pistons, heat baths, staged experiments; nine scenarios | Implemented |
