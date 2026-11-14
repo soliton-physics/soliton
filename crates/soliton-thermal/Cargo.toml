@@ -1,0 +1,14 @@
+[package]
+name = "soliton-thermal"
+description = "A gas of colliding molecules with pistons and heat baths: the Soliton Physics thermal pillar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["physics", "simulation", "thermodynamics", "molecular-dynamics", "education"]
+categories = ["science", "simulation"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
