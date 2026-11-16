@@ -3,6 +3,7 @@
 
 mod circuits;
 mod mechanics;
+mod modern;
 mod optics;
 mod statmech;
 mod thermal;
@@ -10,6 +11,7 @@ mod waves;
 
 pub use circuits::CircuitBench;
 pub use mechanics::MechanicsWorld;
+pub use modern::ModernRun;
 pub use optics::OpticsBench;
 pub use statmech::StatRun;
 pub use thermal::ThermalGas;
