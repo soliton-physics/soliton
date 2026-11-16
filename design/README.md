@@ -36,3 +36,4 @@ A document states the physics, the numerical method, the public API, and how the
 | [014](014-thermal.md) | Thermal physics: a gas of hard spheres, pistons, heat baths, staged experiments; nine scenarios | Implemented |
 | [015](015-circuits.md) | Circuits from Kirchhoff's laws: steady, transient and alternating; nineteen scenarios | Implemented |
 | [016](016-statistical-mechanics.md) | Monte Carlo and the Ising model: darts, random walks, Metropolis, a temperature sweep | Implemented |
+| [017](017-modern-physics.md) | Modern physics: the photoelectric effect, matter waves, Rutherford and Bohr, decay, binding energy | Implemented |

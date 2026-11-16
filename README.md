@@ -107,7 +107,9 @@ charges in electric and magnetic fields, Gauss's law, bar magnets with magnetic 
 exactly through mirrors, glass and lenses (`soliton-optics`). Thermal physics is a gas of molecules with pistons
 and heat reservoirs (`soliton-thermal`): kinetic theory and thermodynamics with nothing thermodynamic put in. Circuits are solved from Kirchhoff's laws
 (`soliton-circuits`), steady, in time and alternating. `soliton-statmech` has Monte Carlo methods and the Ising
-model, checked against Onsager's exact solution. The wave solvers above are the
+model, checked against Onsager's exact solution. `soliton-modern` has class 12 modern
+physics: the photoelectric effect, matter waves, Rutherford scattering, the Bohr atom, radioactive decay and
+binding energy. The wave solvers above are the
 first piece of the fields pillar and continue after that.
 
 ## License
