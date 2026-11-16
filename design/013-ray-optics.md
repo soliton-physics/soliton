@@ -87,3 +87,13 @@ with something ideal. `lens-maker` traces a lens 8 mm thick against the thin-len
 - **Outlines must close** for the even-odd rule to mean anything; this is not checked.
 - **A ray along an outline's edge, or through a corner,** is decided by round-off.
 - **No bench of one's own yet.** Scenes are data, so a front end could edit them; none does.
+
+## Colour (added in 0.6.1)
+
+A glass may carry a `dispersion`, Cauchy's `B` in square micrometres, and a ray a `wavelength`. The index for
+that ray is `n + B(1/λ² − 1/λ_D²)`, with `n` the index quoted for the yellow of sodium, so that every earlier
+scene, whose rays have no wavelength, is unchanged. White light is seven such rays from one point.
+
+A ray may also be given a number of `inner_reflections`: that many times, on meeting the inside of a surface it
+could leave through, it is reflected instead. Real light does both there; this follows the reflected part, which
+is the part a rainbow is made of. Nothing is said about how much light takes each path.

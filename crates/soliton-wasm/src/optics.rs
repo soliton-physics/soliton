@@ -56,6 +56,8 @@ struct RayInfo {
     angles: bool,
     /// Draw it lightly: it is background to another ray.
     faint: bool,
+    /// In nanometres, for a ray of one colour.
+    wavelength: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -149,7 +151,7 @@ impl OpticsBench {
                     index: 0.0,
                     focal: 0.0,
                 },
-                Element::Glass { outline, index } => {
+                Element::Glass { outline, index, .. } => {
                     // The curves of an outline are joined end to end in whichever order closes it.
                     let mut points: Vec<Vec2> = Vec::new();
                     for curve in outline {
@@ -220,6 +222,7 @@ impl OpticsBench {
                 },
                 angles: traced.angles,
                 faint: traced.faint,
+                wavelength: traced.wavelength,
             })
             .collect();
         to_js(&infos)

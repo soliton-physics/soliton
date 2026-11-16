@@ -1,7 +1,7 @@
 //! An optical bench as data: what is on it, the rays sent through it, the objects whose images are wanted, and
 //! the textbook answers with how each is read off the traced rays. Lengths are in metres, angles in radians.
 
-use crate::bench::{crossing, Bench, Element, Image, Path, Ray};
+use crate::bench::{crossing, Bench, Element, Image, Light, Path, Ray};
 use crate::curve::Curve;
 use serde::{Deserialize, Serialize};
 use soliton_core::Vec2;
@@ -103,6 +103,10 @@ pub enum ElementSpec {
     Glass {
         outline: Vec<CurveSpec>,
         index: f64,
+        /// Cauchy's `B` in square micrometres: how much the index rises towards the violet. Zero bends every
+        /// colour alike.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        dispersion: f64,
     },
     /// An ideal thin lens; `focal` is negative for a diverging one.
     ThinLens {
@@ -127,6 +131,17 @@ pub enum SourceSpec {
         #[serde(default, skip_serializing_if = "is_false")]
         faint: bool,
     },
+    /// One ray of a single colour, `wavelength` in nanometres, which dispersive glass bends by its own amount.
+    /// With `inner_reflections`, it is turned back that many times inside a drop or a prism before leaving.
+    Coloured {
+        from: [f64; 2],
+        through: [f64; 2],
+        wavelength: f64,
+        #[serde(default, skip_serializing_if = "is_none")]
+        inner_reflections: usize,
+        #[serde(default, skip_serializing_if = "is_false")]
+        faint: bool,
+    },
     /// `count` rays from a point, spread evenly `half_angle` either side of the line towards `towards`. A
     /// `faint` fan is background to a ray that is the subject.
     Fan {
@@ -148,6 +163,14 @@ pub enum SourceSpec {
 
 fn is_false(v: &bool) -> bool {
     !*v
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
+}
+
+fn is_none(v: &usize) -> bool {
+    *v == 0
 }
 
 /// An upright object, drawn as an arrow from `base` to `tip`, with its base on the axis. Its image is the
@@ -274,6 +297,8 @@ pub struct Traced {
     pub angles: bool,
     /// Drawn lightly, behind the rays that matter.
     pub faint: bool,
+    /// In nanometres, for a ray of one colour.
+    pub wavelength: Option<f64>,
 }
 
 /// The image of an object: of its base and of its tip.
@@ -336,9 +361,32 @@ impl OpticsScene {
     }
 
     pub fn glass(self, outline: Vec<Curve>, index: f64) -> Self {
+        self.dispersive_glass(outline, index, 0.0)
+    }
+
+    /// Glass whose index is `index` for yellow light and rises towards the violet by Cauchy's `dispersion`.
+    pub fn dispersive_glass(self, outline: Vec<Curve>, index: f64, dispersion: f64) -> Self {
         self.element(ElementSpec::Glass {
             outline: outline.into_iter().map(CurveSpec::from).collect(),
             index,
+            dispersion,
+        })
+    }
+
+    /// A ray of one colour, turned back `inner_reflections` times inside whatever it enters.
+    pub fn coloured(
+        self,
+        from: [f64; 2],
+        through: [f64; 2],
+        wavelength: f64,
+        inner_reflections: usize,
+    ) -> Self {
+        self.source(SourceSpec::Coloured {
+            from,
+            through,
+            wavelength,
+            inner_reflections,
+            faint: false,
         })
     }
 
@@ -426,7 +474,11 @@ impl OpticsScene {
             elements.push(match spec {
                 ElementSpec::Mirror { curve } => Element::Mirror(curve.build()?),
                 ElementSpec::Screen { curve } => Element::Screen(curve.build()?),
-                ElementSpec::Glass { outline, index } => {
+                ElementSpec::Glass {
+                    outline,
+                    index,
+                    dispersion,
+                } => {
                     if index.is_nan() || *index <= 0.0 {
                         return err("glass: a refractive index must be positive");
                     }
@@ -439,6 +491,7 @@ impl OpticsScene {
                             .map(CurveSpec::build)
                             .collect::<Result<_, _>>()?,
                         index: *index,
+                        dispersion: *dispersion,
                     }
                 }
                 ElementSpec::ThinLens {
@@ -472,8 +525,10 @@ impl OpticsScene {
         })
     }
 
-    /// Every ray the sources send out, in order, with whether its angles are to be marked and whether it is faint.
-    fn rays(&self) -> Result<Vec<(Ray, bool, bool)>, SceneError> {
+    /// Every ray the sources send out, in order, with whether its angles are to be marked, whether it is faint,
+    /// and what light it is.
+    fn rays(&self) -> Result<Vec<(Ray, bool, bool, Light)>, SceneError> {
+        let plain = Light::default();
         let mut rays = Vec::new();
         for source in &self.sources {
             match *source {
@@ -486,7 +541,26 @@ impl OpticsScene {
                     if from == through {
                         return err("ray: `from` and `through` must differ");
                     }
-                    rays.push((Ray::towards(v(from), v(through)), angles, faint));
+                    rays.push((Ray::towards(v(from), v(through)), angles, faint, plain));
+                }
+                SourceSpec::Coloured {
+                    from,
+                    through,
+                    wavelength,
+                    inner_reflections,
+                    faint,
+                } => {
+                    if from == through {
+                        return err("ray: `from` and `through` must differ");
+                    }
+                    if wavelength.is_nan() || wavelength <= 0.0 {
+                        return err("ray: a wavelength must be positive");
+                    }
+                    let light = Light {
+                        wavelength: Some(wavelength),
+                        inner_reflections,
+                    };
+                    rays.push((Ray::towards(v(from), v(through)), false, faint, light));
                 }
                 SourceSpec::Fan {
                     from,
@@ -503,7 +577,7 @@ impl OpticsScene {
                             0.0
                         };
                         let direction = Vec2::from_polar(1.0, middle + share * half_angle);
-                        rays.push((Ray::new(v(from), direction), false, faint));
+                        rays.push((Ray::new(v(from), direction), false, faint, plain));
                     }
                 }
                 SourceSpec::Beam {
@@ -520,7 +594,7 @@ impl OpticsScene {
                             0.0
                         };
                         let origin = v(centre) + direction.perp() * (share * width);
-                        rays.push((Ray::new(origin, direction), false, false));
+                        rays.push((Ray::new(origin, direction), false, false, plain));
                     }
                 }
             }
@@ -534,10 +608,11 @@ impl OpticsScene {
         let rays: Vec<Traced> = self
             .rays()?
             .into_iter()
-            .map(|(ray, angles, faint)| Traced {
-                path: bench.trace(ray, self.reach),
+            .map(|(ray, angles, faint, light)| Traced {
+                path: bench.trace_light(ray, self.reach, light),
                 angles,
                 faint,
+                wavelength: light.wavelength,
             })
             .collect();
         let images: Vec<Option<ObjectImage>> = self

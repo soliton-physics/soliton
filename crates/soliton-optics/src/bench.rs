@@ -9,8 +9,13 @@ pub enum Element {
     /// Stops a ray: a screen, or the blackened back of something.
     Screen(Curve),
     /// A piece of transparent material: a closed outline and its refractive index. Where two overlap, the later
-    /// one in the list is what is there.
-    Glass { outline: Vec<Curve>, index: f64 },
+    /// one in the list is what is there. `index` is for yellow light; `dispersion` is how fast it rises towards
+    /// the violet, and is zero for a material taken to bend all colours alike.
+    Glass {
+        outline: Vec<Curve>,
+        index: f64,
+        dispersion: f64,
+    },
     /// An ideal thin lens: every ray through it is turned by `height / focal`, whatever its height or slope, so
     /// it obeys the lens formula exactly and has no aberration. `axis` is a unit vector along its principal
     /// axis and `aperture` how far it reaches either side of it.
@@ -20,6 +25,26 @@ pub enum Element {
         focal: f64,
         aperture: f64,
     },
+}
+
+/// The wavelength the refractive indices in a scene are quoted for: the yellow of sodium, in micrometres.
+const YELLOW: f64 = 0.5893;
+
+/// The index of a material for light of a wavelength in nanometres, by Cauchy's formula `n = A + B/λ²`, with
+/// `dispersion` the `B` in square micrometres.
+pub fn index_for_colour(index: f64, dispersion: f64, wavelength: f64) -> f64 {
+    let micrometres = wavelength * 1e-3;
+    index + dispersion * (1.0 / (micrometres * micrometres) - 1.0 / (YELLOW * YELLOW))
+}
+
+/// What kind of light a ray is.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Light {
+    /// In nanometres. `None` is light of no particular colour, bent by each material's quoted index.
+    pub wavelength: Option<f64>,
+    /// How many times the ray is turned back at the inside of a surface it could have left through. Some light
+    /// is always reflected there; this follows that part and not the part that gets out, as a rainbow needs.
+    pub inner_reflections: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -141,13 +166,23 @@ impl Bench {
         }
     }
 
-    /// The refractive index at a point.
+    /// The refractive index at a point, for light of no particular colour.
     pub fn index_at(&self, point: Vec2) -> f64 {
+        self.index_for(point, None)
+    }
+
+    /// The refractive index at a point for light of a wavelength in nanometres.
+    pub fn index_for(&self, point: Vec2, wavelength: Option<f64>) -> f64 {
         // A fixed direction no outline in a scene is likely to run along.
         let probe = Vec2::new(0.754_877_666_2, 0.655_865_618_0);
         let mut index = self.ambient;
         for element in &self.elements {
-            if let Element::Glass { outline, index: n } = element {
+            if let Element::Glass {
+                outline,
+                index: n,
+                dispersion,
+            } = element
+            {
                 let crossings: usize = outline
                     .iter()
                     .map(|curve| {
@@ -159,7 +194,7 @@ impl Bench {
                     })
                     .sum();
                 if crossings % 2 == 1 {
-                    index = *n;
+                    index = wavelength.map_or(*n, |nm| index_for_colour(*n, *dispersion, nm));
                 }
             }
         }
@@ -206,6 +241,12 @@ impl Bench {
     /// Follows a ray through everything on the bench until it leaves, is stopped, or has gone `reach` since its
     /// last turn.
     pub fn trace(&self, ray: Ray, reach: f64) -> Path {
+        self.trace_light(ray, reach, Light::default())
+    }
+
+    /// The same for light of a given colour, which each material bends by its own amount.
+    pub fn trace_light(&self, ray: Ray, reach: f64, light: Light) -> Path {
+        let mut inner_reflections = light.inner_reflections;
         let mut ray = Ray::new(ray.origin, ray.direction);
         let first = ray.direction;
         let mut points = vec![ray.origin];
@@ -232,13 +273,16 @@ impl Bench {
                 Element::Mirror(_) => (EventKind::Reflection, reflected),
                 Element::Screen(_) => (EventKind::Absorbed, ray.direction),
                 Element::Glass { .. } => {
-                    let from = self.index_at(at - ray.direction * PROBE);
-                    let into = self.index_at(at + ray.direction * PROBE);
+                    let from = self.index_for(at - ray.direction * PROBE, light.wavelength);
+                    let into = self.index_for(at + ray.direction * PROBE, light.wavelength);
                     let ratio = from / into;
                     // Snell's law, n₁ sin i = n₂ sin r, in vector form.
                     let sin_out_squared = ratio * ratio * (1.0 - cos_in * cos_in);
                     if sin_out_squared > 1.0 {
                         (EventKind::TotalReflection, reflected)
+                    } else if from > into && inner_reflections > 0 {
+                        inner_reflections -= 1;
+                        (EventKind::Reflection, reflected)
                     } else {
                         let cos_out = (1.0 - sin_out_squared).sqrt();
                         (

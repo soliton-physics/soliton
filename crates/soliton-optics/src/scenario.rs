@@ -502,6 +502,191 @@ fn prism(spec: &ScenarioSpec, p: &Params) -> OpticsScene {
         )
 }
 
+// ---------------------------------------------------------------- colours: a prism and a raindrop
+
+/// White light as seven rays, from red to violet, wavelengths in nanometres.
+pub const COLOURS: [f64; 7] = [700.0, 620.0, 580.0, 530.0, 470.0, 445.0, 410.0];
+
+/// Cauchy's coefficient, in square micrometres, of a glass whose index for violet exceeds that for red by `spread`.
+fn cauchy(spread: f64) -> f64 {
+    spread / (1.0 / (0.41 * 0.41) - 1.0 / (0.70 * 0.70))
+}
+
+static SPECTRUM: [Param; 4] = [
+    param(
+        "apex",
+        "Angle of the prism, A",
+        "°",
+        (30.0, 75.0),
+        1.0,
+        60.0,
+    ),
+    param(
+        "index",
+        "Refractive index for yellow light",
+        "",
+        (1.45, 1.8),
+        0.01,
+        1.62,
+    ),
+    param(
+        "spread",
+        "Index for violet minus index for red",
+        "",
+        (0.005, 0.08),
+        0.005,
+        0.04,
+    ),
+    param("angle", "Angle of incidence", "°", (30.0, 85.0), 1.0, 55.0),
+];
+
+fn dispersion(spec: &ScenarioSpec, p: &Params) -> OpticsScene {
+    let (apex, n) = (p.get(spec, "apex").to_radians(), p.get(spec, "index"));
+    let (b, i) = (
+        cauchy(p.get(spec, "spread")),
+        p.get(spec, "angle").to_radians(),
+    );
+    let height = 0.12;
+    let half_base = height * (0.5 * apex).tan();
+    let corners = [
+        Vec2::new(-half_base, 0.0),
+        Vec2::new(half_base, 0.0),
+        Vec2::new(0.0, height),
+    ];
+    let outline: Vec<Curve> = (0..3)
+        .map(|k| Curve::Segment {
+            a: corners[k],
+            b: corners[(k + 1) % 3],
+        })
+        .collect();
+    let meet = (corners[0] + corners[2]) * 0.5;
+    let direction = Vec2::from_polar(1.0, -0.5 * apex + i);
+    let start = meet - direction * 0.16;
+    let mut scene = OpticsScene::new(spec.title)
+        .dispersive_glass(outline, n, b)
+        .view([0.03, 0.4 * height], 0.24, 0.13);
+    scene.reach = 0.32;
+    for wavelength in COLOURS {
+        scene = scene.coloured([start.x, start.y], [meet.x, meet.y], wavelength, 0);
+    }
+    // Each colour has an index of its own, and so an angle of its own at each face.
+    let index = |nm: f64| crate::bench::index_for_colour(n, b, nm);
+    let deviation = |nm: f64| {
+        let r2 = apex - (i.sin() / index(nm)).asin();
+        let out = index(nm) * r2.sin();
+        (out <= 1.0 && r2 >= 0.0).then(|| i + out.asin() - apex)
+    };
+    let (red, violet) = (COLOURS[0], COLOURS[6]);
+    scene = scene
+        .answer("Index for red light", index(red))
+        .answer("Index for violet light", index(violet));
+    if let (Some(least), Some(most)) = (deviation(red), deviation(violet)) {
+        scene = scene
+            .measured(
+                "Red is turned through (°)",
+                least.to_degrees(),
+                MeasureSpec::Deviation { ray: 0 },
+            )
+            .measured(
+                "Violet is turned through (°)",
+                most.to_degrees(),
+                MeasureSpec::Deviation { ray: 6 },
+            )
+            .answer(
+                "Angle between red and violet as they leave (°)",
+                (most - least).to_degrees(),
+            );
+    }
+    scene
+}
+
+/// Water: its index for yellow light, and Cauchy's coefficient fitted to its indices for red and violet.
+const WATER: (f64, f64) = (1.333, 0.0031);
+
+static RAINBOW: [Param; 2] = [
+    param(
+        "height",
+        "Height of the sunlight on the drop, as a share of its radius",
+        "",
+        (0.05, 0.99),
+        0.01,
+        0.86,
+    ),
+    param(
+        "reflections",
+        "Reflections inside the drop",
+        "",
+        (1.0, 2.0),
+        1.0,
+        1.0,
+    ),
+];
+
+/// The angle a ray is turned through by a drop, in radians between 0 and π: refracted in at `sin i = height`,
+/// reflected `bounces` times inside, and refracted out.
+fn turned_by_drop(index: f64, height: f64, bounces: f64) -> f64 {
+    let (i, r) = (height.asin(), (height / index).asin());
+    let total = 2.0 * (i - r) + bounces * (std::f64::consts::PI - 2.0 * r);
+    let folded = total.rem_euclid(std::f64::consts::TAU);
+    folded.min(std::f64::consts::TAU - folded)
+}
+
+/// The height at which the turning is least, where the light that comes back is crowded together.
+fn rainbow_height(index: f64, bounces: f64) -> f64 {
+    (1.0 - (index * index - 1.0) / (bounces * (bounces + 2.0))).sqrt()
+}
+
+fn rainbow(spec: &ScenarioSpec, p: &Params) -> OpticsScene {
+    let (height, bounces) = (p.get(spec, "height"), p.get(spec, "reflections").round());
+    // A raindrop a millimetre in radius.
+    let radius = 0.001;
+    let drop = vec![Curve::Arc {
+        centre: Vec2::new(0.0, 0.0),
+        radius,
+        from: 0.0,
+        sweep: std::f64::consts::TAU,
+    }];
+    let mut scene = OpticsScene::new(spec.title)
+        .dispersive_glass(drop, WATER.0, WATER.1)
+        .view([-0.0008, -0.0004], 0.004, 0.0025);
+    scene.reach = 0.006;
+    let y = height * radius;
+    for wavelength in COLOURS {
+        scene = scene.coloured([-0.004, y], [0.0, y], wavelength, bounces as usize);
+    }
+    // Sunlight at other heights, lightly: it comes back spread out, except near one angle.
+    for share in [0.3, 0.5, 0.65, 0.76, 0.93, 0.98] {
+        scene = scene.source(SourceSpec::Coloured {
+            from: [-0.004, share * radius],
+            through: [0.0, share * radius],
+            wavelength: 620.0,
+            inner_reflections: bounces as usize,
+            faint: true,
+        });
+    }
+    let index = |nm: f64| crate::bench::index_for_colour(WATER.0, WATER.1, nm);
+    let (red, violet) = (index(COLOURS[0]), index(COLOURS[6]));
+    // A rainbow is seen at this angle from the point opposite the Sun.
+    let bow = |n: f64| 180.0 - turned_by_drop(n, rainbow_height(n, bounces), bounces).to_degrees();
+    scene
+        .measured(
+            "Red is turned through (°)",
+            turned_by_drop(red, height, bounces).to_degrees(),
+            MeasureSpec::Deviation { ray: 0 },
+        )
+        .measured(
+            "Violet is turned through (°)",
+            turned_by_drop(violet, height, bounces).to_degrees(),
+            MeasureSpec::Deviation { ray: 6 },
+        )
+        .answer("Rainbow angle for red (°)", bow(red))
+        .answer("Rainbow angle for violet (°)", bow(violet))
+        .answer(
+            "Height that sends red to its rainbow angle (share of radius)",
+            rainbow_height(red, bounces),
+        )
+}
+
 // ---------------------------------------------------------------- a single spherical surface
 
 static SURFACE: [Param; 3] = [
@@ -1116,6 +1301,14 @@ static CATALOGUE: &[Scenario] = &[
     Scenario {
         spec: spec("prism", "Refraction through a prism", "A prism turns a ray towards its base twice. Change the angle of incidence and the deviation falls, reaches a least value when the ray inside runs parallel to the base, and rises again. That least value is how the refractive index of a glass is measured.", "refraction through a prism", &PRISM),
         describe: prism,
+    },
+    Scenario {
+        spec: spec("dispersion", "Dispersion: a prism splits white light", "Glass bends violet light a little more than red, because its refractive index is a little larger for shorter wavelengths. A slab undoes at its second face what it did at the first. A prism does not: its two faces turn the light the same way, and white light fans out into a spectrum.", "dispersion by a prism", &SPECTRUM),
+        describe: dispersion,
+    },
+    Scenario {
+        spec: spec("rainbow", "The rainbow", "Sunlight enters a raindrop, is reflected once from the back of it, and comes out again. Each colour is bent by its own amount on the way in and on the way out, so red and violet leave in slightly different directions. Light at most heights is scattered widely, but near one height it all comes back at nearly the same angle, 42 degrees from the direction opposite the Sun. That crowding is the bow.", "the rainbow", &RAINBOW),
+        describe: rainbow,
     },
     Scenario {
         spec: spec("telescope", "An astronomical telescope", "Parallel light from a star is brought to a focus by the objective, and the eyepiece, its own focus at the same place, sends it on parallel again but at a much steeper angle. The star looks that many times further from the axis.", "optical instruments", &TELESCOPE),

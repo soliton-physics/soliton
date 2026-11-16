@@ -17,6 +17,7 @@ fn block(index: f64) -> Element {
         Vec2::new(-10.0, 0.0),
     ];
     Element::Glass {
+        dispersion: 0.0,
         outline: (0..4)
             .map(|i| Curve::Segment {
                 a: corners[i],
@@ -95,6 +96,7 @@ fn light_is_totally_reflected_beyond_the_critical_angle_and_not_before() {
 #[test]
 fn the_index_is_that_of_the_innermost_glass() {
     let inner = Element::Glass {
+        dispersion: 0.0,
         outline: vec![Curve::Arc {
             centre: Vec2::new(0.0, -1.0),
             radius: 0.5,
@@ -393,4 +395,49 @@ fn scenes_survive_a_round_trip_through_json() {
         assert_eq!(scene, back, "{}", scenario.spec.id);
     }
     assert!(OpticsScene::from_json("{\"schema\": 1, \"title\": \"x\", \"ambient\": 0}").is_err());
+}
+
+#[test]
+fn glass_bends_violet_more_than_red() {
+    let answers = measured("dispersion", &Params::default());
+    let (red, violet) = (answers[0].2, answers[1].2);
+    assert!(violet > red + 1.0, "red {red}, violet {violet}");
+    // With no difference between the indices there is no spectrum.
+    let plain = measured("dispersion", &Params::default().set("spread", 0.0));
+    assert!((plain[0].2 - plain[1].2).abs() < 0.5, "{plain:?}");
+    for angle in [45.0, 55.0, 70.0] {
+        agree("dispersion", &Params::default().set("angle", angle), 1e-6);
+    }
+}
+
+#[test]
+fn a_raindrop_sends_red_back_at_42_degrees_and_violet_at_40() {
+    let find_answer = |reflections: f64, name: &str| {
+        let scene = find("rainbow")
+            .unwrap()
+            .scene(&Params::default().set("reflections", reflections));
+        scene
+            .answers
+            .iter()
+            .find(|a| a.name.contains(name))
+            .unwrap()
+            .value
+    };
+    assert!((find_answer(1.0, "angle for red") - 42.4).abs() < 0.3);
+    assert!((find_answer(1.0, "angle for violet") - 40.7).abs() < 0.3);
+    // The second bow, from two reflections, is higher and has its colours the other way round.
+    assert!((find_answer(2.0, "angle for red") - 50.5).abs() < 0.5);
+    assert!(find_answer(2.0, "angle for violet") > find_answer(2.0, "angle for red") + 2.0);
+    for (height, reflections) in [
+        (0.3, 1.0),
+        (0.86, 1.0),
+        (0.97, 1.0),
+        (0.5, 2.0),
+        (0.95, 2.0),
+    ] {
+        let params = Params::default()
+            .set("height", height)
+            .set("reflections", reflections);
+        agree("rainbow", &params, 1e-6);
+    }
 }
