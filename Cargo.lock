@@ -352,7 +352,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "soliton-circuits"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "num-complex",
  "serde",
@@ -361,11 +361,11 @@ dependencies = [
 
 [[package]]
 name = "soliton-core"
-version = "0.6.0"
+version = "0.6.1"
 
 [[package]]
 name = "soliton-fields"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "num-complex",
  "rustfft",
@@ -374,7 +374,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-mechanics"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -383,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-modern"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "soliton-thermal",
@@ -391,7 +391,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-optics"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -400,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-py"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "num-complex",
  "numpy",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-statmech"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -427,7 +427,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-thermal"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -435,7 +435,7 @@ dependencies = [
 
 [[package]]
 name = "soliton-wasm"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "js-sys",
  "num-complex",
