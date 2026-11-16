@@ -45,6 +45,49 @@ pub enum Kind {
     Galvanometer {
         resistance: f64,
     },
+    /// A p–n junction, conducting from `a` to `b`. `saturation` is the tiny current that leaks the wrong way,
+    /// A. With `breakdown`, it also conducts backwards once the reverse voltage reaches that many volts: a
+    /// Zener diode.
+    Diode {
+        saturation: f64,
+        breakdown: Option<f64>,
+    },
+}
+
+/// The thermal voltage `kT/e` at room temperature, V: the scale on which a junction's current grows.
+pub const THERMAL_VOLTAGE: f64 = 0.025_85;
+/// The saturation current of a small silicon diode and of a germanium one, A.
+pub const SILICON: f64 = 1e-12;
+pub const GERMANIUM: f64 = 1e-6;
+/// The current at which a Zener diode's breakdown voltage is quoted, A.
+const ZENER_TEST: f64 = 5e-3;
+/// A conductance across every junction, far too small to matter, that keeps the equations settled when a
+/// diode is passing nothing, S.
+const LEAK: f64 = 1e-12;
+
+/// The current through a junction with `voltage` across it, and how fast that current grows with the voltage:
+/// Shockley's equation, `I = Iₛ(e^{V/V_T} − 1)`, and for a Zener the same law mirrored about its breakdown.
+pub fn junction(saturation: f64, breakdown: Option<f64>, voltage: f64) -> (f64, f64) {
+    // Beyond this the exponential is carried on as a straight line, which a solver's first wild guesses need.
+    let grow = |x: f64| {
+        if x > 40.0 {
+            let top = 40.0f64.exp();
+            (top * (1.0 + x - 40.0), top)
+        } else {
+            (x.exp(), x.exp())
+        }
+    };
+    let (forward, slope) = grow(voltage / THERMAL_VOLTAGE);
+    let mut current = saturation * (forward - 1.0) + LEAK * voltage;
+    let mut conductance = saturation * slope / THERMAL_VOLTAGE + LEAK;
+    if let Some(volts) = breakdown {
+        // Placed so that the reverse current is the test current at exactly the quoted voltage.
+        let knee = volts - THERMAL_VOLTAGE * (ZENER_TEST / saturation).ln();
+        let (reverse, slope) = grow(-(voltage + knee) / THERMAL_VOLTAGE);
+        current -= saturation * reverse;
+        conductance += saturation * slope / THERMAL_VOLTAGE;
+    }
+    (current, conductance)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -116,6 +159,9 @@ enum Stamp<T> {
 /// The potential at each junction, and the voltage and current of each component.
 type Solved<T> = (Vec<T>, Vec<(T, T)>);
 
+/// The most improvements of a diode's guessed voltage before giving up.
+const NEWTON_STEPS: usize = 400;
+
 /// Resistance of a capacitor's plates and leads at the starting instant, Ω.
 const PLATES: f64 = 1e-9;
 
@@ -157,7 +203,7 @@ impl Circuit {
         closed != flips_at.is_some_and(|at| time >= at)
     }
 
-    fn stamp(&self, index: usize, time: f64, moment: Moment) -> Stamp<f64> {
+    fn stamp(&self, index: usize, time: f64, moment: Moment, guess: &[f64]) -> Stamp<f64> {
         let wire = Stamp::Branch {
             resistance: 0.0,
             emf: 0.0,
@@ -169,6 +215,17 @@ impl Circuit {
                 Stamp::Conductance {
                     conductance: 1.0 / resistance,
                     source: 0.0,
+                }
+            }
+            // Its curve replaced by the tangent to it at the voltage guessed: Newton's method, a step at a time.
+            Kind::Diode {
+                saturation,
+                breakdown,
+            } => {
+                let (current, conductance) = junction(saturation, breakdown, guess[index]);
+                Stamp::Conductance {
+                    conductance,
+                    source: current - conductance * guess[index],
                 }
             }
             // v = emf + i·r, with i reckoned from the positive terminal to the negative through the cell.
@@ -206,9 +263,13 @@ impl Circuit {
                 Moment::Step { dt, before } => {
                     let conductance = 2.0 * capacitance / dt;
                     let was = before.readings[index];
+                    // A capacitor put straight across a cell is charged in no time by a surge without limit.
+                    // That surge is over the moment it has happened, and is not carried into the average.
+                    let surge = was.current.abs() * PLATES > 1e-6 * (1.0 + was.voltage.abs());
+                    let current = if surge { 0.0 } else { was.current };
                     Stamp::Conductance {
                         conductance,
-                        source: -conductance * was.voltage - was.current,
+                        source: -conductance * was.voltage - current,
                     }
                 }
             },
@@ -338,18 +399,41 @@ impl Circuit {
     }
 
     fn at(&self, time: f64, moment: Moment) -> Option<State> {
-        let stamps: Vec<Stamp<f64>> = (0..self.elements.len())
-            .map(|i| self.stamp(i, time, moment))
-            .collect();
-        let (potentials, readings) = self.kirchhoff(&stamps)?;
-        Some(State {
-            time,
-            potentials,
-            readings: readings
-                .into_iter()
-                .map(|(voltage, current)| Reading { voltage, current })
-                .collect(),
-        })
+        let count = self.elements.len();
+        let diode = |i: usize| matches!(self.elements[i].kind, Kind::Diode { .. });
+        // A diode's voltage is guessed, the circuit solved with its tangent, and the guess improved, until it
+        // stops changing. A step in time starts from where the diode was.
+        let mut guess = match moment {
+            Moment::Step { before, .. } => before.readings.iter().map(|r| r.voltage).collect(),
+            _ => vec![0.0; count],
+        };
+        for _ in 0..NEWTON_STEPS {
+            let stamps: Vec<Stamp<f64>> = (0..count)
+                .map(|i| self.stamp(i, time, moment, &guess))
+                .collect();
+            let (potentials, readings) = self.kirchhoff(&stamps)?;
+            let mut moved: f64 = 0.0;
+            for i in (0..count).filter(|i| diode(*i)) {
+                let (was, wanted) = (guess[i], readings[i].0);
+                // The exponential is so steep that a full step overshoots wildly; a climb is taken as far as
+                // the tangent's logarithm allows, as circuit simulators do.
+                let rise = (wanted - was).abs();
+                let limited = THERMAL_VOLTAGE * (1.0 + rise / THERMAL_VOLTAGE).ln();
+                guess[i] = was + limited.copysign(wanted - was);
+                moved = moved.max(rise);
+            }
+            if moved < 1e-10 {
+                return Some(State {
+                    time,
+                    potentials,
+                    readings: readings
+                        .into_iter()
+                        .map(|(voltage, current)| Reading { voltage, current })
+                        .collect(),
+                });
+            }
+        }
+        None
     }
 
     /// The steady state: what the meters read once every capacitor has finished charging and every inductor's
@@ -419,7 +503,8 @@ impl Circuit {
             .iter()
             .map(|element| match element.kind {
                 Kind::Wire | Kind::Ammeter => wire(),
-                Kind::Voltmeter => Stamp::Open,
+                // A diode has no single impedance; the alternating solution is for circuits without one.
+                Kind::Voltmeter | Kind::Diode { .. } => Stamp::Open,
                 Kind::Resistor { resistance } | Kind::Galvanometer { resistance } => {
                     Stamp::Conductance {
                         conductance: real(1.0 / resistance),

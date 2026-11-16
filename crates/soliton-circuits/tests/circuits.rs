@@ -291,7 +291,12 @@ fn alternating_current_is_the_same_by_complex_numbers_and_by_stepping() {
 #[test]
 fn every_scenario_measures_what_the_textbook_predicts() {
     for scenario in catalogue() {
-        agree(scenario.spec.id, &Params::default(), 1e-3);
+        let tolerance = match scenario.spec.id {
+            // At the peak the diode is charging the capacitor as well as feeding the load, and drops more.
+            "rectifier-filter" => 2e-2,
+            _ => 1e-3,
+        };
+        agree(scenario.spec.id, &Params::default(), tolerance);
     }
 }
 
@@ -428,4 +433,166 @@ fn scenes_survive_a_round_trip_through_json_and_bad_ones_are_refused() {
         shorted.start().is_err(),
         "an ideal battery across a wire has no answer"
     );
+}
+
+#[test]
+fn a_diode_follows_shockleys_equation() {
+    use soliton_circuits::{junction, SILICON, THERMAL_VOLTAGE};
+    // Sixty millivolts more across it for every tenfold in the current.
+    let at = |v: f64| junction(SILICON, None, v).0;
+    assert!((at(0.66) / at(0.60) - (0.06 / THERMAL_VOLTAGE).exp()).abs() < 1e-3);
+    assert!((at(-5.0) + SILICON).abs() < 1e-10);
+    // A Zener takes its test current backwards at its rated voltage.
+    assert!((junction(SILICON, Some(5.1), -5.1).0 + 5e-3).abs() < 1e-5);
+    for volts in [-8.0, -0.5, 0.3, 0.75, 1.5, 5.0] {
+        agree(
+            "pn-junction",
+            &Params::default().set("voltage", volts),
+            1e-6,
+        );
+        let germanium = Params::default()
+            .set("voltage", volts)
+            .set("germanium", 1.0);
+        agree("pn-junction", &germanium, 1e-6);
+    }
+    // Silicon needs about 0.7 V to pass a few milliamperes, and germanium about 0.2 V.
+    let drop = |germanium: f64| {
+        let params = Params::default()
+            .set("voltage", 1.5)
+            .set("germanium", germanium);
+        run("pn-junction", &params).answers().unwrap()[0].2.unwrap()
+    };
+    assert!((drop(0.0) - 0.62).abs() < 0.06, "{}", drop(0.0));
+    assert!((drop(1.0) - 0.22).abs() < 0.06, "{}", drop(1.0));
+}
+
+fn load_voltages(id: &str, params: &Params) -> Vec<f64> {
+    let mut bench = run(id, params);
+    while !bench.finished() {
+        bench.advance(1e-3).unwrap();
+    }
+    let load = bench.circuit.find("load").unwrap();
+    bench
+        .history
+        .iter()
+        .map(|s| s.readings[load].voltage)
+        .collect()
+}
+
+#[test]
+fn rectifiers_pass_current_one_way() {
+    let half = load_voltages("half-wave-rectifier", &Params::default());
+    let full = load_voltages("full-wave-rectifier", &Params::default());
+    let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+    // Never backwards, and the full-wave rectifier delivers twice the average of the half-wave.
+    assert!(half.iter().chain(&full).all(|v| *v > -1e-6));
+    assert!(
+        (mean(&full) / mean(&half) - 2.0).abs() < 0.02,
+        "{} {}",
+        mean(&full),
+        mean(&half)
+    );
+    assert!(
+        (mean(&half) - 9.3 / std::f64::consts::PI).abs() < 0.2,
+        "{}",
+        mean(&half)
+    );
+    // Half the time the half-wave rectifier gives nothing at all.
+    let idle = half.iter().filter(|v| **v < 1e-3).count() as f64 / half.len() as f64;
+    assert!((idle - 0.5).abs() < 0.06, "{idle}");
+}
+
+#[test]
+fn a_capacitor_smooths_the_output_and_a_bigger_one_smooths_it_more() {
+    let ripple = |microfarads: f64| {
+        let v = load_voltages(
+            "rectifier-filter",
+            &Params::default().set("capacitance", microfarads),
+        );
+        // After the first two cycles, when it has charged.
+        let settled = &v[v.len() * 2 / 5..];
+        settled.iter().cloned().fold(f64::MIN, f64::max)
+            - settled.iter().cloned().fold(f64::MAX, f64::min)
+    };
+    let (small, large) = (ripple(100.0), ripple(400.0));
+    // I/(2fC) with 9.3 V on 1 kΩ: 0.93 V for 100 µF. The estimate is on the high side, as it always is.
+    assert!(small > 0.6 && small < 0.95, "{small}");
+    assert!((small / large - 4.0).abs() < 0.6, "{small} {large}");
+}
+
+#[test]
+fn a_zener_holds_its_voltage_while_the_input_changes() {
+    let output = |input: f64, load: f64| {
+        let params = Params::default().set("input", input).set("load", load);
+        run("zener-regulator", &params).answers().unwrap()[0]
+            .2
+            .unwrap()
+    };
+    // From 9 V to 20 V in, the output moves by under a tenth of a volt.
+    assert!(
+        (output(9.0, 1.0) - 5.1).abs() < 0.08,
+        "{}",
+        output(9.0, 1.0)
+    );
+    assert!((output(20.0, 1.0) - output(9.0, 1.0)).abs() < 0.1);
+    assert!((output(12.0, 5.0) - output(12.0, 0.5)).abs() < 0.1);
+    // With too little input it is only a potential divider.
+    assert!((output(6.0, 0.2) - 6.0 * 200.0 / 530.0).abs() < 1e-3);
+    for input in [6.0, 9.0, 12.0, 20.0] {
+        agree(
+            "zener-regulator",
+            &Params::default().set("input", input),
+            1e-6,
+        );
+    }
+}
+
+#[test]
+fn diode_gates_have_the_right_truth_tables() {
+    for (a, b) in [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0)] {
+        let params = Params::default().set("a", a).set("b", b);
+        for (id, expected) in [("or-gate", a + b > 0.0), ("and-gate", a * b > 0.0)] {
+            let answers = run(id, &params).answers().unwrap();
+            assert_eq!(answers[0].1 > 0.5, expected, "{id} {a} {b}");
+            // High is within a diode's drop of 5 V and low within one of 0 V.
+            let volts = answers[1].2.unwrap();
+            assert_eq!(volts > 2.5, expected, "{id} {a} {b}: {volts}");
+            assert!(volts > 4.2 || volts < 0.8, "{id} {a} {b}: {volts}");
+            agree(id, &params, 1e-6);
+        }
+    }
+}
+
+#[test]
+fn a_capacitor_straight_across_a_cell_is_charged_at_once_and_then_carries_nothing() {
+    let mut circuit = Circuit::new(2);
+    circuit.add(
+        "cell",
+        1,
+        0,
+        Kind::Battery {
+            emf: 6.0,
+            internal: 0.0,
+        },
+    );
+    circuit.add("R", 1, 0, Kind::Resistor { resistance: 100.0 });
+    let c = circuit.add(
+        "C",
+        1,
+        0,
+        Kind::Capacitor {
+            capacitance: 1e-4,
+            initial_voltage: 0.0,
+        },
+    );
+    let mut state = circuit.start().unwrap();
+    for _ in 0..50 {
+        state = circuit.step(&state, 1e-5).unwrap();
+        assert!((state.readings[c].voltage - 6.0).abs() < 1e-6);
+        assert!(
+            state.readings[c].current.abs() < 1e-6,
+            "{}",
+            state.readings[c].current
+        );
+    }
 }

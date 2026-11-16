@@ -92,3 +92,23 @@ Nineteen scenarios: `ohms-law`, `resistors-in-series`, `resistors-in-parallel`, 
 - One frequency in an alternating circuit.
 - The trapezoidal rule can ring for a step or two after an abrupt change in a circuit with an inductor and an
   open switch; no scenario does that.
+
+## Diodes (added in 0.6.1)
+
+`Kind::Diode` is the first component whose law is not linear: Shockley's `I = Iₛ(e^{V/V_T} − 1)`, with a second
+exponential mirrored about the breakdown voltage for a Zener, placed to carry 5 mA at its rating. It enters the
+equations as a conductance with a current source beside it, the tangent to its curve at a guessed voltage, and
+`Circuit::at` repeats the solve with improved guesses until no diode's voltage moves by 10⁻¹⁰ V. A guess is
+allowed to change by no more than `V_T ln(1 + ΔV/V_T)` a time, which keeps the exponential from overflowing on
+the first wild steps. A step in time starts from where each diode was.
+
+A conductance of 10⁻¹² S stands across every junction so that a circuit whose only path is through a blocked
+diode still has an answer. The alternating solution treats a diode as open: it has no single impedance.
+
+Scenario answers for diode circuits come from `bisect`, a root-finder that knows nothing of the circuit solver,
+so that the two check each other.
+
+A capacitor wired straight across an ideal cell is charged at the starting instant by a current without limit.
+The trapezoidal rule would carry that current into its next average and ring for ever, so a capacitor whose
+starting current is of that kind (it would drop more than a millionth of the voltage across its plates' trace
+of resistance) is stepped on from a current of zero. Circuits people build for themselves meet this often.

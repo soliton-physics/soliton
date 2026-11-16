@@ -10,7 +10,7 @@ from soliton import circuits
 def test_catalogue_covers_four_chapters():
     chapters = {s["syllabus"]["chapter"] for s in circuits.catalogue()}
     assert "Current electricity" in chapters and "Alternating current" in chapters
-    assert len(chapters) == 4
+    assert len(chapters) == 5
 
 
 def test_a_balanced_bridge_passes_no_current():

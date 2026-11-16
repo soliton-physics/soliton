@@ -129,6 +129,30 @@ impl CircuitBench {
         Float64Array::from(flat.as_slice())
     }
 
+    /// The characteristic curve of a diode, as `volts, milliamperes` pairs from a little beyond its breakdown,
+    /// or a couple of volts backwards, up to where it passes 50 mA forwards. Empty for anything else.
+    pub fn diode_curve(&self, element: usize) -> Float64Array {
+        let Some(soliton_circuits::Kind::Diode {
+            saturation,
+            breakdown,
+        }) = self.bench.circuit.elements.get(element).map(|e| e.kind)
+        else {
+            return Float64Array::new_with_length(0);
+        };
+        let top = soliton_circuits::THERMAL_VOLTAGE * (0.05 / saturation).ln();
+        let bottom = breakdown.map_or(-2.0, |v| -(v + 0.15));
+        let flat: Vec<f64> = (0..=600)
+            .flat_map(|i| {
+                let v = bottom + (top - bottom) * f64::from(i) / 600.0;
+                [
+                    v,
+                    1e3 * soliton_circuits::junction(saturation, breakdown, v).0,
+                ]
+            })
+            .collect();
+        Float64Array::from(flat.as_slice())
+    }
+
     /// The complex amplitudes of each component's alternating voltage and current, as
     /// `Re V, Im V, Re I, Im I`; empty for a circuit not solved that way. Each quantity is the imaginary part
     /// of its amplitude times `e^{iωt}`.

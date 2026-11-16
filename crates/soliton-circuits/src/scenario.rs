@@ -1293,7 +1293,360 @@ fn series_lcr(spec: &ScenarioSpec, p: &Params) -> CircuitScene {
 
 // ---------------------------------------------------------------- catalogue
 
+// ---------------------------------------------------------------- semiconductors
+
+use crate::circuit::{junction, GERMANIUM, SILICON};
+
+fn diode(saturation: f64) -> KindSpec {
+    KindSpec::Diode {
+        saturation,
+        breakdown: None,
+    }
+}
+
+/// Finds where `excess` changes sign between `low` and `high` by halving the interval.
+fn bisect(mut low: f64, mut high: f64, excess: impl Fn(f64) -> f64) -> f64 {
+    let rising = excess(high) > excess(low);
+    for _ in 0..200 {
+        let middle = 0.5 * (low + high);
+        if (excess(middle) > 0.0) == rising {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    0.5 * (low + high)
+}
+
+/// The voltage across `count` like diodes side by side, fed from `emf` through `resistance`: where the current
+/// the diodes take is the current the resistor lets through. Found without the circuit solver, to check it.
+fn diode_drop(emf: f64, resistance: f64, saturation: f64, count: f64) -> f64 {
+    bisect(emf.min(0.0), emf.max(0.0), |v| {
+        count * junction(saturation, None, v).0 - (emf - v) / resistance
+    })
+}
+
+static JUNCTION: [Param; 3] = [
+    param(
+        "voltage",
+        "Battery, negative when turned round",
+        "V",
+        (-10.0, 5.0),
+        0.05,
+        1.5,
+    ),
+    param(
+        "resistance",
+        "Resistance in series",
+        "Ω",
+        (50.0, 1000.0),
+        10.0,
+        100.0,
+    ),
+    param(
+        "germanium",
+        "Material: 0 silicon, 1 germanium",
+        "",
+        (0.0, 1.0),
+        1.0,
+        0.0,
+    ),
+];
+
+fn pn_junction(spec: &ScenarioSpec, p: &Params) -> CircuitScene {
+    let (emf, r) = (p.get(spec, "voltage"), p.get(spec, "resistance"));
+    let germanium = p.get(spec, "germanium") >= 0.5;
+    let saturation = if germanium { GERMANIUM } else { SILICON };
+    let across = diode_drop(emf, r, saturation, 1.0);
+    // A battery turned round is drawn turned round.
+    let (plus, minus) = if emf >= 0.0 {
+        ((0.0, 2.0), (0.0, 0.0))
+    } else {
+        ((0.0, 0.0), (0.0, 2.0))
+    };
+    Board::new(spec, Analysis::Steady)
+        .part("battery", plus, minus, cell(emf.abs(), 0.0))
+        .part("A", (0.0, 2.0), (1.5, 2.0), KindSpec::Ammeter)
+        .part("R", (1.5, 2.0), (4.0, 2.0), resistor(r))
+        .part("D", (4.0, 2.0), (4.0, 0.0), diode(saturation))
+        .wire(&[(4.0, 0.0), (0.0, 0.0)])
+        .wire(&[(4.0, 2.0), (6.0, 2.0)])
+        .part("V", (6.0, 2.0), (6.0, 0.0), KindSpec::Voltmeter)
+        .wire(&[(6.0, 0.0), (4.0, 0.0)])
+        .watch(&["D"])
+        .measured("Voltage across the diode (V)", across, voltage("V"), 1.0)
+        .measured(
+            "Current (mA)",
+            (emf - across) / r * MILLI,
+            current("A"),
+            MILLI,
+        )
+        .answer(
+            "It begins to conduct at about (V)",
+            if germanium { 0.2 } else { 0.7 },
+        )
+        .answer("Forward biased? (1 = yes)", f64::from(emf > 0.0))
+        .done()
+}
+
+const MAINS: f64 = 50.0;
+
+/// A circuit on the mains followed for `cycles` cycles, a cycle shown in two seconds.
+fn cycles(cycles: f64) -> Analysis {
+    Analysis::Transient {
+        dt: 1.0 / MAINS / 400.0,
+        duration: cycles / MAINS,
+        playback: 0.5 / MAINS,
+    }
+}
+
+fn mains(amplitude: f64) -> KindSpec {
+    KindSpec::Source {
+        amplitude,
+        frequency: MAINS,
+        phase: 0.0,
+    }
+}
+
+fn peak_voltage(element: &str) -> MeasureSpec {
+    MeasureSpec::Peak {
+        element: element.to_string(),
+        quantity: Quantity::Voltage,
+    }
+}
+
+static RECTIFIER: [Param; 2] = [
+    param(
+        "amplitude",
+        "Peak voltage of the supply",
+        "V",
+        (2.0, 20.0),
+        0.5,
+        10.0,
+    ),
+    param("load", "Load resistance", "kΩ", (0.2, 5.0), 0.1, 1.0),
+];
+
+fn half_wave(spec: &ScenarioSpec, p: &Params) -> CircuitScene {
+    let (peak, load) = (p.get(spec, "amplitude"), p.get(spec, "load") * 1e3);
+    let lost = diode_drop(peak, load, SILICON, 1.0);
+    Board::new(spec, cycles(3.0))
+        .part("supply", (0.0, 2.0), (0.0, 0.0), mains(peak))
+        .wire(&[(0.0, 2.0), (1.0, 2.0)])
+        .part("D", (1.0, 2.0), (3.0, 2.0), diode(SILICON))
+        .wire(&[(3.0, 2.0), (4.5, 2.0)])
+        .part("load", (4.5, 2.0), (4.5, 0.0), resistor(load))
+        .wire(&[(4.5, 0.0), (0.0, 0.0)])
+        .watch(&["supply", "load"])
+        .measured(
+            "Peak voltage across the load (V)",
+            peak - lost,
+            peak_voltage("load"),
+            1.0,
+        )
+        .answer("Lost across the diode at the peak (V)", lost)
+        .answer("Pulses of current a second", MAINS)
+        .answer(
+            "Average output, about peak/π (V)",
+            (peak - lost) / std::f64::consts::PI,
+        )
+        .done()
+}
+
+/// A transformer with a centre tap, a diode on each end of it, and a load between where the diodes meet and
+/// the tap. Drawn tall, since a page has more height to spare than width. With `smoothing`, a capacitor of
+/// that many farads is put across the load.
+fn centre_tapped(
+    spec: &ScenarioSpec,
+    peak: f64,
+    load: f64,
+    shown: f64,
+    smoothing: Option<f64>,
+) -> Board {
+    let board = Board::new(spec, cycles(shown))
+        .part("upper", (0.0, 4.0), (0.0, 2.0), mains(peak))
+        .part("lower", (0.0, 2.0), (0.0, 0.0), mains(peak))
+        .wire(&[(0.0, 4.0), (2.2, 4.0)])
+        .part("D1", (2.2, 4.0), (3.6, 4.0), diode(SILICON))
+        .wire(&[(3.6, 4.0), (5.0, 4.0), (5.0, 2.0)])
+        .wire(&[(0.0, 0.0), (2.2, 0.0)])
+        .part("D2", (2.2, 0.0), (3.6, 0.0), diode(SILICON))
+        .wire(&[(3.6, 0.0), (5.0, 0.0), (5.0, 1.0), (5.0, 2.0)])
+        .part("load", (5.0, 2.0), (3.2, 2.0), resistor(load))
+        .wire(&[(3.2, 2.0), (0.0, 2.0)])
+        .watch(&["upper", "load"]);
+    match smoothing {
+        Some(farads) => board
+            .part("C", (5.0, 1.0), (3.2, 1.0), capacitor(farads, 0.0))
+            .wire(&[(3.2, 1.0), (3.2, 2.0)]),
+        None => board,
+    }
+}
+
+fn full_wave(spec: &ScenarioSpec, p: &Params) -> CircuitScene {
+    let (peak, load) = (p.get(spec, "amplitude"), p.get(spec, "load") * 1e3);
+    let lost = diode_drop(peak, load, SILICON, 1.0);
+    centre_tapped(spec, peak, load, 3.0, None)
+        .measured(
+            "Peak voltage across the load (V)",
+            peak - lost,
+            peak_voltage("load"),
+            1.0,
+        )
+        .answer("Lost across a diode at the peak (V)", lost)
+        .answer("Pulses of current a second", 2.0 * MAINS)
+        .answer(
+            "Average output, about 2 × peak/π (V)",
+            2.0 * (peak - lost) / std::f64::consts::PI,
+        )
+        .done()
+}
+
+static FILTER: [Param; 3] = [
+    param(
+        "amplitude",
+        "Peak voltage of the supply",
+        "V",
+        (2.0, 20.0),
+        0.5,
+        10.0,
+    ),
+    param("load", "Load resistance", "kΩ", (0.2, 5.0), 0.1, 1.0),
+    param(
+        "capacitance",
+        "Filter capacitor",
+        "µF",
+        (5.0, 1000.0),
+        5.0,
+        100.0,
+    ),
+];
+
+fn filter(spec: &ScenarioSpec, p: &Params) -> CircuitScene {
+    let (peak, load) = (p.get(spec, "amplitude"), p.get(spec, "load") * 1e3);
+    let c = p.get(spec, "capacitance") / MICRO;
+    let top = peak - diode_drop(peak, load, SILICON, 1.0);
+    centre_tapped(spec, peak, load, 5.0, Some(c))
+        // A little under the bare rectifier's, since at the peak the diode is also charging the capacitor.
+        .measured("Peak output, about (V)", top, peak_voltage("load"), 1.0)
+        // The capacitor empties through the load for about half a cycle between one peak and the next.
+        .answer("Ripple, about I/(2fC) (V)", top / load / (2.0 * MAINS * c))
+        .answer(
+            "Time constant of the capacitor and load, RC (ms)",
+            load * c * MILLI,
+        )
+        .answer("Time between peaks (ms)", MILLI / (2.0 * MAINS))
+        .done()
+}
+
+static ZENER: [Param; 4] = [
+    param("input", "Unregulated input", "V", (6.0, 20.0), 0.5, 12.0),
+    param("zener", "Zener voltage", "V", (3.0, 10.0), 0.1, 5.1),
+    param(
+        "series",
+        "Series resistance",
+        "Ω",
+        (100.0, 1000.0),
+        10.0,
+        330.0,
+    ),
+    param("load", "Load resistance", "kΩ", (0.2, 5.0), 0.1, 1.0),
+];
+
+fn zener(spec: &ScenarioSpec, p: &Params) -> CircuitScene {
+    let (input, rated) = (p.get(spec, "input"), p.get(spec, "zener"));
+    let (series, load) = (p.get(spec, "series"), p.get(spec, "load") * 1e3);
+    // The current the Zener takes backwards with `v` across it.
+    let taken = |v: f64| -junction(SILICON, Some(rated), -v).0;
+    let output = bisect(0.0, input, |v| v / load + taken(v) - (input - v) / series);
+    let unloaded = input * load / (series + load);
+    Board::new(spec, Analysis::Steady)
+        .part("battery", (0.0, 2.0), (0.0, 0.0), cell(input, 0.0))
+        .part("series R", (0.0, 2.0), (2.5, 2.0), resistor(series))
+        .part(
+            "Zener",
+            (2.5, 0.0),
+            (2.5, 2.0),
+            KindSpec::Diode {
+                saturation: SILICON,
+                breakdown: Some(rated),
+            },
+        )
+        .wire(&[(2.5, 2.0), (4.5, 2.0)])
+        .part("load", (4.5, 2.0), (4.5, 0.0), resistor(load))
+        .wire(&[(4.5, 0.0), (2.5, 0.0), (0.0, 0.0)])
+        .measured("Voltage across the load (V)", output, voltage("load"), 1.0)
+        .answer("Is it regulating? (1 = yes)", f64::from(unloaded > rated))
+        .answer(
+            "Current through the series resistor, about (V − V_Z)/R (mA)",
+            ((input - rated.min(unloaded)) / series) * MILLI,
+        )
+        .answer(
+            "Current in the load, about V_Z/R_L (mA)",
+            rated.min(unloaded) / load * MILLI,
+        )
+        .done()
+}
+
+static GATE: [Param; 2] = [
+    param("a", "Input A (0 or 1)", "", (0.0, 1.0), 1.0, 1.0),
+    param("b", "Input B (0 or 1)", "", (0.0, 1.0), 1.0, 0.0),
+];
+
+/// The voltage that stands for a 1, and the resistor of a diode gate.
+const HIGH: f64 = 5.0;
+const GATE_RESISTOR: f64 = 4700.0;
+
+/// The two inputs of a gate, as cells of 5 V or of nothing, and the ground they share.
+fn gate_inputs(spec: &ScenarioSpec, a: f64, b: f64) -> Board {
+    Board::new(spec, Analysis::Steady)
+        .part("A", (0.0, 3.0), (0.0, 0.0), cell(HIGH * a, 0.0))
+        .part("B", (1.8, 1.5), (1.8, 0.0), cell(HIGH * b, 0.0))
+        .wire(&[(0.0, 3.0), (2.2, 3.0)])
+        .wire(&[(1.8, 1.5), (2.2, 1.5)])
+        .wire(&[(3.6, 1.5), (3.6, 3.0), (4.4, 3.0)])
+        .part("Y", (4.4, 3.0), (4.4, 0.0), KindSpec::Voltmeter)
+        .wire(&[(6.6, 0.0), (4.4, 0.0), (1.8, 0.0), (0.0, 0.0)])
+}
+
+fn or_gate(spec: &ScenarioSpec, p: &Params) -> CircuitScene {
+    let (a, b) = (p.get(spec, "a").round(), p.get(spec, "b").round());
+    let highs = a + b;
+    let output = if highs == 0.0 {
+        0.0
+    } else {
+        HIGH - diode_drop(HIGH, GATE_RESISTOR, SILICON, highs)
+    };
+    gate_inputs(spec, a, b)
+        .part("D1", (2.2, 3.0), (3.6, 3.0), diode(SILICON))
+        .part("D2", (2.2, 1.5), (3.6, 1.5), diode(SILICON))
+        .wire(&[(4.4, 3.0), (6.6, 3.0)])
+        .part("R", (6.6, 3.0), (6.6, 0.0), resistor(GATE_RESISTOR))
+        .answer("Output Y = A + B", f64::from(highs > 0.0))
+        .measured("Voltage at Y (V)", output, voltage("Y"), 1.0)
+        .done()
+}
+
+fn and_gate(spec: &ScenarioSpec, p: &Params) -> CircuitScene {
+    let (a, b) = (p.get(spec, "a").round(), p.get(spec, "b").round());
+    let lows = 2.0 - a - b;
+    let output = if lows == 0.0 {
+        HIGH
+    } else {
+        diode_drop(HIGH, GATE_RESISTOR, SILICON, lows)
+    };
+    gate_inputs(spec, a, b)
+        .part("D1", (3.6, 3.0), (2.2, 3.0), diode(SILICON))
+        .part("D2", (3.6, 1.5), (2.2, 1.5), diode(SILICON))
+        .part("R", (6.6, 3.0), (4.4, 3.0), resistor(GATE_RESISTOR))
+        .part("supply", (6.6, 3.0), (6.6, 0.0), cell(HIGH, 0.0))
+        .answer("Output Y = A · B", f64::from(lows == 0.0))
+        .measured("Voltage at Y (V)", output, voltage("Y"), 1.0)
+        .done()
+}
+
 const CURRENT: &str = "Current electricity";
+const SEMICONDUCTORS: &str = "Semiconductor electronics";
 const CAPACITANCE: &str = "Electrostatic potential and capacitance";
 const INDUCTION: &str = "Electromagnetic induction";
 const AC: &str = "Alternating current";
@@ -1396,5 +1749,33 @@ static CATALOGUE: &[Scenario] = &[
     Scenario {
         spec: spec("series-lcr", "The series LCR circuit", "The inductor and the capacitor pull the phase opposite ways, and at one frequency they cancel exactly. There the circuit is a plain resistance, the current is at its largest, and the voltages across L and C can each be far bigger than the source. That is resonance, and how a radio is tuned.", AC, "series LCR circuit and resonance", &LCR),
         describe: series_lcr,
+    },
+    Scenario {
+        spec: spec("pn-junction", "The p–n junction diode", "A diode lets current through one way and almost none the other. Forward biased, nothing much happens until the voltage across it nears 0.7 V, and then the current rises steeply. Reverse biased, only a tiny leakage flows. The graph is its characteristic curve, with a dot where this circuit sits on it.", SEMICONDUCTORS, "p-n junction and its characteristics", &JUNCTION),
+        describe: pn_junction,
+    },
+    Scenario {
+        spec: spec("half-wave-rectifier", "A half-wave rectifier", "An alternating supply pushes current one way and then the other. A diode in the way passes only the half-cycles that forward bias it, so the load gets pulses of current all in one direction, with gaps between.", SEMICONDUCTORS, "diode as a rectifier", &RECTIFIER),
+        describe: half_wave,
+    },
+    Scenario {
+        spec: spec("full-wave-rectifier", "A full-wave rectifier", "Two diodes on a centre-tapped transformer take turns. Whichever half-cycle it is, one of them is forward biased and sends current through the load the same way. The gaps of the half-wave rectifier are filled in.", SEMICONDUCTORS, "diode as a rectifier", &RECTIFIER),
+        describe: full_wave,
+    },
+    Scenario {
+        spec: spec("rectifier-filter", "Smoothing with a capacitor", "A capacitor across the load charges up to the peak and then, while the supply falls away, keeps the load going from its own store. The output no longer drops to zero between peaks: it sags a little and is topped up again. A bigger capacitor sags less.", SEMICONDUCTORS, "filter circuits", &FILTER),
+        describe: filter,
+    },
+    Scenario {
+        spec: spec("zener-regulator", "A Zener diode as a voltage regulator", "A Zener diode is made to conduct backwards at one particular voltage, and once it does, the voltage across it hardly changes whatever current it carries. Put across a load, it holds the load's voltage steady while the supply wanders, taking up the slack in the current itself.", SEMICONDUCTORS, "Zener diode as a voltage regulator", &ZENER),
+        describe: zener,
+    },
+    Scenario {
+        spec: spec("or-gate", "An OR gate from two diodes", "The output is high if either input is high. Each input reaches the output through a diode, so a high input pulls the output up and a low one is simply cut off by its diode. Set the two inputs and read the output.", SEMICONDUCTORS, "logic gates", &GATE),
+        describe: or_gate,
+    },
+    Scenario {
+        spec: spec("and-gate", "An AND gate from two diodes", "The output is high only if both inputs are high. The resistor tries to pull the output up to the supply, but any input that is low drags it down through its diode. Only when neither does is the output left high.", SEMICONDUCTORS, "logic gates", &GATE),
+        describe: and_gate,
     },
 ];

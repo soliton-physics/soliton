@@ -11,5 +11,7 @@ mod linear;
 pub mod scenario;
 pub mod scene;
 
-pub use circuit::{Circuit, Element, Kind, Phasor, Reading, State};
+pub use circuit::{
+    junction, Circuit, Element, Kind, Phasor, Reading, State, GERMANIUM, SILICON, THERMAL_VOLTAGE,
+};
 pub use num_complex::Complex64;

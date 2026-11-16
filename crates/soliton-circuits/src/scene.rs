@@ -75,6 +75,18 @@ pub enum KindSpec {
     Galvanometer {
         resistance: f64,
     },
+    /// A junction diode conducting from `a` to `b`; with `breakdown`, a Zener of that voltage. `saturation`
+    /// defaults to that of silicon.
+    Diode {
+        #[serde(default = "silicon")]
+        saturation: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        breakdown: Option<f64>,
+    },
+}
+
+fn silicon() -> f64 {
+    crate::circuit::SILICON
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -281,6 +293,18 @@ impl CircuitScene {
                     phase,
                 },
                 KindSpec::Switch { closed, flips_at } => Kind::Switch { closed, flips_at },
+                KindSpec::Diode {
+                    saturation,
+                    breakdown,
+                } => {
+                    if breakdown.is_some_and(|v| v.is_nan() || v <= 0.0) {
+                        return err(format!("{name}: a breakdown voltage must be positive"));
+                    }
+                    Kind::Diode {
+                        saturation: positive(saturation, "saturation current")?,
+                        breakdown,
+                    }
+                }
             };
             circuit.add(name, element.a, element.b, kind);
         }
