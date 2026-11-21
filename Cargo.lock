@@ -357,6 +357,7 @@ dependencies = [
  "num-complex",
  "serde",
  "serde_json",
+ "soliton-core",
 ]
 
 [[package]]
@@ -373,6 +374,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "soliton-matter"
+version = "0.6.1"
+dependencies = [
+ "serde",
+ "soliton-core",
+ "soliton-modern",
+]
+
+[[package]]
 name = "soliton-mechanics"
 version = "0.6.1"
 dependencies = [
@@ -386,6 +396,7 @@ name = "soliton-modern"
 version = "0.6.1"
 dependencies = [
  "serde",
+ "soliton-core",
  "soliton-thermal",
 ]
 
@@ -409,6 +420,7 @@ dependencies = [
  "serde_json",
  "soliton-circuits",
  "soliton-fields",
+ "soliton-matter",
  "soliton-mechanics",
  "soliton-modern",
  "soliton-optics",
@@ -422,6 +434,7 @@ version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
+ "soliton-core",
  "soliton-thermal",
 ]
 
@@ -431,6 +444,7 @@ version = "0.6.1"
 dependencies = [
  "serde",
  "serde_json",
+ "soliton-core",
 ]
 
 [[package]]
@@ -443,6 +457,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "soliton-circuits",
  "soliton-fields",
+ "soliton-matter",
  "soliton-mechanics",
  "soliton-modern",
  "soliton-optics",

@@ -1,0 +1,15 @@
+[package]
+name = "soliton-matter"
+description = "Solids, fluids and heat: the Soliton Physics properties of matter pillar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["physics", "simulation", "fluids", "elasticity", "education"]
+categories = ["science", "simulation"]
+
+[dependencies]
+soliton-core = { workspace = true }
+soliton-modern = { workspace = true }
+serde = { workspace = true }
