@@ -10,6 +10,7 @@ keywords = ["physics", "simulation", "circuits", "electronics", "education"]
 categories = ["science", "simulation"]
 
 [dependencies]
+soliton-core = { workspace = true }
 num-complex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

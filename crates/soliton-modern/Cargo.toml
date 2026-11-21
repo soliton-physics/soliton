@@ -10,5 +10,6 @@ keywords = ["physics", "simulation", "quantum", "nuclear", "education"]
 categories = ["science", "simulation"]
 
 [dependencies]
+soliton-core = { workspace = true }
 soliton-thermal = { workspace = true }
 serde = { workspace = true }

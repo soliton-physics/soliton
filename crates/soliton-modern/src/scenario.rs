@@ -76,7 +76,12 @@ impl Params {
         self.values
             .iter()
             .find(|(n, _)| n == name)
-            .map_or(param.default, |(_, v)| v.clamp(param.min, param.max))
+            .map_or(param.default, |(_, v)| {
+                // A typed value may go past the slider, as far as the quantity allows.
+                let (low, high) =
+                    soliton_core::typed_limits(param.name, param.unit, param.min, param.max);
+                v.clamp(low, high)
+            })
     }
 }
 
