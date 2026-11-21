@@ -110,7 +110,8 @@ and heat reservoirs (`soliton-thermal`): kinetic theory and thermodynamics with 
 model, checked against Onsager's exact solution. `soliton-modern` has class 12 modern
 physics: the photoelectric effect, matter waves, Rutherford scattering, the Bohr atom, radioactive decay and
 binding energy. `soliton-matter` has class 11 properties of matter: stress and strain, fluids at rest
-and in flow, and heat. The wave solvers above are the
+and in flow, and heat. `soliton-magnetism` has the field of a current summed from the Biot–Savart law, the
+force on a current, and electromagnetic induction from Faraday's law to the transformer. The wave solvers above are the
 first piece of the fields pillar and continue after that.
 
 ## License

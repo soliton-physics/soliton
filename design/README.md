@@ -38,3 +38,4 @@ A document states the physics, the numerical method, the public API, and how the
 | [016](016-statistical-mechanics.md) | Monte Carlo and the Ising model: darts, random walks, Metropolis, a temperature sweep | Implemented |
 | [017](017-modern-physics.md) | Modern physics: the photoelectric effect, matter waves, Rutherford and Bohr, decay, binding energy | Implemented |
 | [018](018-properties-of-matter.md) | Properties of matter: solids under stress, fluids at rest and in flow, heat | Implemented |
+| [019](019-currents-and-magnetism.md) | Currents and magnetism: the Biot–Savart law, forces on currents, electromagnetic induction | Implemented |
