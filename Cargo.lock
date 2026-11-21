@@ -374,6 +374,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "soliton-magnetism"
+version = "0.7.0"
+dependencies = [
+ "serde",
+ "soliton-core",
+ "soliton-modern",
+]
+
+[[package]]
 name = "soliton-matter"
 version = "0.7.0"
 dependencies = [
@@ -420,6 +429,7 @@ dependencies = [
  "serde_json",
  "soliton-circuits",
  "soliton-fields",
+ "soliton-magnetism",
  "soliton-matter",
  "soliton-mechanics",
  "soliton-modern",
@@ -457,6 +467,7 @@ dependencies = [
  "serde-wasm-bindgen",
  "soliton-circuits",
  "soliton-fields",
+ "soliton-magnetism",
  "soliton-matter",
  "soliton-mechanics",
  "soliton-modern",
