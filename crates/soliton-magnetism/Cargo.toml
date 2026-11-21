@@ -1,0 +1,15 @@
+[package]
+name = "soliton-magnetism"
+description = "Currents, their magnetic fields and electromagnetic induction: a Soliton Physics pillar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["physics", "simulation", "magnetism", "induction", "education"]
+categories = ["science", "simulation"]
+
+[dependencies]
+soliton-core = { workspace = true }
+soliton-modern = { workspace = true }
+serde = { workspace = true }

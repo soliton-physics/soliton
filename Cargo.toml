@@ -10,6 +10,7 @@ members = [
     "crates/soliton-statmech",
     "crates/soliton-modern",
     "crates/soliton-matter",
+    "crates/soliton-magnetism",
     "crates/soliton-wasm",
     "crates/soliton-py",
 ]
@@ -23,6 +24,7 @@ default-members = [
     "crates/soliton-statmech",
     "crates/soliton-modern",
     "crates/soliton-matter",
+    "crates/soliton-magnetism",
 ]
 
 [workspace.package]
@@ -42,6 +44,7 @@ soliton-circuits = { path = "crates/soliton-circuits", version = "0.7.0" }
 soliton-statmech = { path = "crates/soliton-statmech", version = "0.7.0" }
 soliton-modern = { path = "crates/soliton-modern", version = "0.7.0" }
 soliton-matter = { path = "crates/soliton-matter", version = "0.7.0" }
+soliton-magnetism = { path = "crates/soliton-magnetism", version = "0.7.0" }
 num-complex = "0.4"
 rustfft = "6.4"
 serde = { version = "1.0", features = ["derive"] }
