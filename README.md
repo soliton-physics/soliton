@@ -109,7 +109,8 @@ and heat reservoirs (`soliton-thermal`): kinetic theory and thermodynamics with 
 (`soliton-circuits`), steady, in time and alternating. `soliton-statmech` has Monte Carlo methods and the Ising
 model, checked against Onsager's exact solution. `soliton-modern` has class 12 modern
 physics: the photoelectric effect, matter waves, Rutherford scattering, the Bohr atom, radioactive decay and
-binding energy. The wave solvers above are the
+binding energy. `soliton-matter` has class 11 properties of matter: stress and strain, fluids at rest
+and in flow, and heat. The wave solvers above are the
 first piece of the fields pillar and continue after that.
 
 ## License

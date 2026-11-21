@@ -37,3 +37,4 @@ A document states the physics, the numerical method, the public API, and how the
 | [015](015-circuits.md) | Circuits from Kirchhoff's laws: steady, transient and alternating; nineteen scenarios | Implemented |
 | [016](016-statistical-mechanics.md) | Monte Carlo and the Ising model: darts, random walks, Metropolis, a temperature sweep | Implemented |
 | [017](017-modern-physics.md) | Modern physics: the photoelectric effect, matter waves, Rutherford and Bohr, decay, binding energy | Implemented |
+| [018](018-properties-of-matter.md) | Properties of matter: solids under stress, fluids at rest and in flow, heat | Implemented |
