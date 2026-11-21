@@ -89,6 +89,10 @@ pub fn fly(energy: f64, z: f64, impact: f64) -> Flight {
             break;
         }
     }
+    // One that never came on stage, turned back or passing wide, has nothing to wait for.
+    if flight.left.is_infinite() {
+        flight.left = 0.0;
+    }
     flight.turned = v[1].atan2(v[0]).to_degrees().abs();
     flight
 }
