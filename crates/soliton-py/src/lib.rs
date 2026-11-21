@@ -4,6 +4,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 mod circuits;
+mod matter;
 mod mechanics;
 mod modern;
 mod optics;
@@ -162,6 +163,8 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(optics::optics_catalogue_json, m)?)?;
     m.add_class::<circuits::CircuitBench>()?;
     m.add_function(wrap_pyfunction!(circuits::circuits_catalogue_json, m)?)?;
+    m.add_class::<matter::MatterRun>()?;
+    m.add_function(wrap_pyfunction!(matter::matter_catalogue_json, m)?)?;
     m.add_class::<modern::ModernRun>()?;
     m.add_function(wrap_pyfunction!(modern::modern_catalogue_json, m)?)?;
     m.add_function(wrap_pyfunction!(modern::electron_wavelength, m)?)?;
