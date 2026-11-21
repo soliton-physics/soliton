@@ -28,23 +28,23 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/soliton-physics/soliton"
 authors = ["Soliton Physics contributors"]
 
 [workspace.dependencies]
-soliton-core = { path = "crates/soliton-core", version = "0.7.0" }
-soliton-fields = { path = "crates/soliton-fields", version = "0.7.0" }
-soliton-mechanics = { path = "crates/soliton-mechanics", version = "0.7.0" }
-soliton-optics = { path = "crates/soliton-optics", version = "0.7.0" }
-soliton-thermal = { path = "crates/soliton-thermal", version = "0.7.0" }
-soliton-circuits = { path = "crates/soliton-circuits", version = "0.7.0" }
-soliton-statmech = { path = "crates/soliton-statmech", version = "0.7.0" }
-soliton-modern = { path = "crates/soliton-modern", version = "0.7.0" }
-soliton-matter = { path = "crates/soliton-matter", version = "0.7.0" }
-soliton-magnetism = { path = "crates/soliton-magnetism", version = "0.7.0" }
+soliton-core = { path = "crates/soliton-core", version = "0.8.0" }
+soliton-fields = { path = "crates/soliton-fields", version = "0.8.0" }
+soliton-mechanics = { path = "crates/soliton-mechanics", version = "0.8.0" }
+soliton-optics = { path = "crates/soliton-optics", version = "0.8.0" }
+soliton-thermal = { path = "crates/soliton-thermal", version = "0.8.0" }
+soliton-circuits = { path = "crates/soliton-circuits", version = "0.8.0" }
+soliton-statmech = { path = "crates/soliton-statmech", version = "0.8.0" }
+soliton-modern = { path = "crates/soliton-modern", version = "0.8.0" }
+soliton-matter = { path = "crates/soliton-matter", version = "0.8.0" }
+soliton-magnetism = { path = "crates/soliton-magnetism", version = "0.8.0" }
 num-complex = "0.4"
 rustfft = "6.4"
 serde = { version = "1.0", features = ["derive"] }
