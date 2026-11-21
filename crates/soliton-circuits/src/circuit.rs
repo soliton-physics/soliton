@@ -415,11 +415,28 @@ impl Circuit {
             let mut moved: f64 = 0.0;
             for i in (0..count).filter(|i| diode(*i)) {
                 let (was, wanted) = (guess[i], readings[i].0);
-                // The exponential is so steep that a full step overshoots wildly; a climb is taken as far as
-                // the tangent's logarithm allows, as circuit simulators do.
                 let rise = (wanted - was).abs();
-                let limited = THERMAL_VOLTAGE * (1.0 + rise / THERMAL_VOLTAGE).ln();
-                guess[i] = was + limited.copysign(wanted - was);
+                // The exponential is so steep that a full step into conduction overshoots wildly; such a step
+                // is taken only as far as the tangent's logarithm allows, as circuit simulators do. A step
+                // towards where the diode blocks is safe at any length.
+                let limited = |from: f64, to: f64| {
+                    let far = (to - from).abs();
+                    from + (THERMAL_VOLTAGE * (1.0 + far / THERMAL_VOLTAGE).ln())
+                        .copysign(to - from)
+                };
+                let breakdown = match self.elements[i].kind {
+                    Kind::Diode { breakdown, .. } => breakdown,
+                    _ => None,
+                };
+                // Where a Zener begins to give way, with a volt in hand.
+                let edge = breakdown.map(|volts| 1.0 - volts);
+                guess[i] = if wanted > was && wanted > 0.0 {
+                    limited(was.max(0.0), wanted)
+                } else if let Some(edge) = edge.filter(|e| wanted < was && wanted < *e) {
+                    limited(was.min(edge), wanted)
+                } else {
+                    wanted
+                };
                 moved = moved.max(rise);
             }
             if moved < 1e-10 {

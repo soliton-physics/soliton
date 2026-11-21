@@ -596,3 +596,29 @@ fn a_capacitor_straight_across_a_cell_is_charged_at_once_and_then_carries_nothin
         );
     }
 }
+
+#[test]
+fn diodes_are_solved_far_outside_the_usual_voltages() {
+    // A hundred volts the wrong way across a diode, and a hundred-volt Zener on a 200 V supply.
+    // The leak is a tenth of a nanoampere beside a hundred volts, and is read to that many fewer figures.
+    agree(
+        "pn-junction",
+        &Params::default()
+            .set("voltage", -100.0)
+            .set("resistance", 5.0),
+        1e-3,
+    );
+    agree(
+        "pn-junction",
+        &Params::default()
+            .set("voltage", 50.0)
+            .set("resistance", 5.0),
+        1e-6,
+    );
+    let zener = Params::default()
+        .set("input", 200.0)
+        .set("zener", 100.0)
+        .set("series", 10_000.0)
+        .set("load", 50.0);
+    agree("zener-regulator", &zener, 1e-6);
+}
